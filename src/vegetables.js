@@ -6,6 +6,7 @@ const VEGETABLE_TYPES = ['carrot', 'cabbage', 'corn']
 const FIELD_DEFINITIONS = [
   { x: -28, z: 18, width: 18, length: 13 },
   { x: 29, z: 27, width: 18, length: 13 },
+  { x: 4, z: -34, width: 18, length: 13 },
 ]
 const VEGETABLES_PER_FIELD = 6
 

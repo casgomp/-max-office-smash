@@ -1,4 +1,4 @@
-export function createUI({ onStart, onPlayAgain, farmSize }) {
+export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChange, onDurationChange, onDifficultyChange, onEnemyCountChange, farmSize }) {
   const hud = document.createElement('div')
   hud.id = 'hud'
   hud.classList.add('hidden')
@@ -15,9 +15,53 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
   start.innerHTML = `
     <div class="panel">
       <h1>Max Farm Smash</h1>
-      <p class="controls">Drive: WASD or arrow keys<br />Shoot: Space bar</p>
-      <input id="player-name" type="text" placeholder="Enter your name" maxlength="16" />
-      <button id="start-button" type="button">Start</button>
+      <div id="main-menu" class="menu-view">
+        <button id="play-button" type="button">Play Game</button>
+        <button id="options-button" type="button">Options</button>
+        <button id="quit-button" type="button">Quit</button>
+      </div>
+      <div id="player-setup" class="menu-view hidden">
+        <p class="controls">Drive: WASD or arrow keys<br />Shoot: Space bar</p>
+        <input id="player-name" type="text" placeholder="Enter your name" maxlength="16" />
+        <button id="start-button" type="button">Start Game</button>
+        <button class="back-button secondary" type="button">Back</button>
+      </div>
+      <div id="options-menu" class="menu-view hidden">
+        <label><input id="sound-option" type="checkbox" checked /> Sound effects</label>
+        <label><input id="minimap-option" type="checkbox" checked /> Show minimap</label>
+        <label>Truck color
+          <select id="truck-color-option">
+            <option value="red">Red</option><option value="blue">Blue</option>
+            <option value="green">Green</option><option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+          </select>
+        </label>
+        <label>Game time
+          <select id="duration-option">
+            <option value="20">20 seconds</option><option value="30">30 seconds</option>
+            <option value="40">40 seconds</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="difficulty-option">
+            <option value="easy">Easy</option><option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option><option value="expert">Expert</option>
+          </select>
+        </label>
+        <label>Enemy trucks
+          <select id="enemy-count-option">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5" selected>5</option>
+            <option value="6">6</option><option value="7">7</option>
+          </select>
+        </label>
+        <p class="controls">WASD / Arrows — Drive<br />Space — Shoot</p>
+        <button class="back-button secondary" type="button">Back</button>
+      </div>
+      <div id="quit-menu" class="menu-view hidden">
+        <p>Thanks for playing Max Farm Smash!</p>
+        <button class="back-button" type="button">Return to Menu</button>
+      </div>
     </div>
   `
 
@@ -30,6 +74,7 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       <p id="final-score">Final Score: 0</p>
       <p id="final-rank">Rank: -</p>
       <p id="final-destroyed">Trucks Destroyed: 0</p>
+      <div id="leaderboard-header"><span>Player</span><span>Score</span></div>
       <ol id="leaderboard-list"></ol>
       <button id="play-again-button" type="button">Play Again</button>
     </div>
@@ -64,7 +109,13 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
   const maxMeterEl = hud.querySelector('#max-meter')
   const maxFillEl = maxMeterEl.querySelector('i')
   const nameInput = start.querySelector('#player-name')
+  const mainMenu = start.querySelector('#main-menu')
+  const playerSetup = start.querySelector('#player-setup')
+  const optionsMenu = start.querySelector('#options-menu')
+  const quitMenu = start.querySelector('#quit-menu')
   const startButton = start.querySelector('#start-button')
+  const minimapOption = start.querySelector('#minimap-option')
+  let minimapEnabled = true
   const finalScoreEl = gameOver.querySelector('#final-score')
   const finalRankEl = gameOver.querySelector('#final-rank')
   const finalDestroyedEl = gameOver.querySelector('#final-destroyed')
@@ -73,6 +124,21 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
   startButton.addEventListener('click', () => {
     onStart(nameInput.value.trim() || 'Player')
   })
+  start.querySelector('#play-button').addEventListener('click', () => {
+    showMenuView(playerSetup)
+    nameInput.focus()
+  })
+  start.querySelector('#options-button').addEventListener('click', () => showMenuView(optionsMenu))
+  start.querySelector('#quit-button').addEventListener('click', () => showMenuView(quitMenu))
+  for (const button of start.querySelectorAll('.back-button')) {
+    button.addEventListener('click', () => showMenuView(mainMenu))
+  }
+  start.querySelector('#sound-option').addEventListener('change', (event) => onSoundChange(event.target.checked))
+  minimapOption.addEventListener('change', () => { minimapEnabled = minimapOption.checked })
+  start.querySelector('#truck-color-option').addEventListener('change', (event) => onTruckColorChange(event.target.value))
+  start.querySelector('#duration-option').addEventListener('change', (event) => onDurationChange(Number(event.target.value)))
+  start.querySelector('#difficulty-option').addEventListener('change', (event) => onDifficultyChange(event.target.value))
+  start.querySelector('#enemy-count-option').addEventListener('change', (event) => onEnemyCountChange(Number(event.target.value)))
   nameInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') startButton.click()
   })
@@ -81,16 +147,16 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
 
   return {
     showStart() {
+      showMenuView(mainMenu)
       document.body.classList.remove('max-mode')
       start.classList.remove('hidden')
       hud.classList.add('hidden')
       minimap.classList.add('hidden')
-      nameInput.focus()
     },
     hideStart() {
       start.classList.add('hidden')
       hud.classList.remove('hidden')
-      minimap.classList.remove('hidden')
+      minimap.classList.toggle('hidden', !minimapEnabled)
     },
     updateHUD(score, timeRemaining, health, destroyedTrucks, maxCharge, maxModeRemaining) {
       scoreEl.textContent = `Score: ${score}`
@@ -156,7 +222,7 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       void damageEffect.offsetWidth
       damageEffect.classList.add('hit')
     },
-    updateMinimap(player, heading, enemies, animals, vegetables) {
+    updateMinimap(player, heading, enemies, animals, vegetables, multiplayerTrucks = []) {
       const size = minimap.width
       const padding = 10
       const mapSize = size - padding * 2
@@ -176,6 +242,7 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       drawMapDots(minimapContext, animals, mapX, mapY, '#f5efe2', 1.8)
       drawMapDots(minimapContext, vegetables, mapX, mapY, '#72ff62', 2.4)
       drawMapDots(minimapContext, enemies, mapX, mapY, '#ff4747', 3.2)
+      drawMapDots(minimapContext, multiplayerTrucks, mapX, mapY, '#ffd84d', 3.5)
 
       minimapContext.save()
       minimapContext.translate(mapX(player.x), mapY(player.z))
@@ -189,6 +256,12 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       minimapContext.fill()
       minimapContext.restore()
     },
+  }
+}
+
+function showMenuView(activeView) {
+  for (const view of activeView.parentElement.querySelectorAll('.menu-view')) {
+    view.classList.toggle('hidden', view !== activeView)
   }
 }
 

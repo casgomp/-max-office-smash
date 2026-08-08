@@ -11,11 +11,17 @@ export const FARM_BUMPS = [
   { x: -30, z: 42, radius: 3.6, height: 0.95 },
   { x: 48, z: -38, radius: 4.5, height: 1.2 },
   { x: -55, z: 12, radius: 4, height: 1.1 },
+  { x: 28, z: 58, radius: 3.6, height: 1.05 },
+  { x: -58, z: -52, radius: 4.8, height: 1.35 },
+  { x: 57, z: -6, radius: 4.2, height: 1.2 },
+  { x: -22, z: -57, radius: 3.9, height: 0.95 },
 ]
 const FARM_RIDGES = [
   { x: 0, z: -30, width: 3, length: 13, height: 0.8, rotation: Math.PI / 5 },
   { x: 30, z: -4, width: 2.5, length: 16, height: 0.65, rotation: -Math.PI / 3 },
   { x: -32, z: 18, width: 3.5, length: 12, height: 0.9, rotation: Math.PI / 2.5 },
+  { x: 45, z: 55, width: 3, length: 14, height: 0.75, rotation: Math.PI / 3 },
+  { x: -50, z: 57, width: 2.8, length: 11, height: 0.7, rotation: -Math.PI / 5 },
 ]
 const FARM_PYRAMIDS = [
   { x: 20, z: 42, radius: 4.5, height: 1.5, rotation: Math.PI / 4 },

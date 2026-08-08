@@ -7,6 +7,11 @@ const SOUND_PROFILES = {
 
 const preloadedSounds = new Map()
 const lastPlayed = new Map()
+let soundsEnabled = true
+
+export function setAnimalSoundsEnabled(enabled) {
+  soundsEnabled = enabled
+}
 
 export function enableAnimalSounds() {
   for (const [type, profile] of Object.entries(SOUND_PROFILES)) {
@@ -20,6 +25,7 @@ export function enableAnimalSounds() {
 }
 
 export function playAnimalHitSound(type) {
+  if (!soundsEnabled) return
   const profile = SOUND_PROFILES[type]
   if (!profile) return
   const now = performance.now()

@@ -7,6 +7,7 @@ export function createGameState() {
   return {
     duration: DURATION,
     timeRemaining: DURATION,
+    elapsedTime: 0,
     score: 0,
     destroyedTrucks: 0,
     maxCharge: 0,
@@ -20,6 +21,7 @@ export function createGameState() {
 
 export function updateGameState(state, delta) {
   if (state.isOver) return
+  state.elapsedTime += delta
   if (state.maxModeRemaining > 0) {
     state.maxModeRemaining = Math.max(0, state.maxModeRemaining - delta)
   } else {
@@ -85,8 +87,15 @@ export function addTime(state, seconds) {
   return seconds
 }
 
+export function setGameDuration(state, seconds) {
+  const duration = [20, 30, 40].includes(Number(seconds)) ? Number(seconds) : DURATION
+  state.duration = duration
+  if (!state.isOver) state.timeRemaining = duration
+}
+
 export function resetGameState(state) {
   state.timeRemaining = state.duration
+  state.elapsedTime = 0
   state.score = 0
   state.destroyedTrucks = 0
   state.maxCharge = 0

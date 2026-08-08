@@ -6,7 +6,6 @@ const ENEMY_COUNT = 5
 const MOVE_SPEED = 10
 const TURN_SPEED = 2.8
 const ACCELERATION_RESPONSE = 4.5
-const KEEP_DISTANCE = 9
 const FIRE_RANGE = 24
 const FIRE_COOLDOWN = 1.15
 const PROJECTILE_SPEED = 14
@@ -168,16 +167,20 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       health: ENEMY_HEALTH,
       healthBar,
       shotRecoil: 0,
+      ramCooldown: THREE.MathUtils.randFloat(1.5, 4),
+      ramTime: 0,
     })
   }
 
-  function spawn() {
+  function spawn(count = ENEMY_COUNT, playerPosition = new THREE.Vector3()) {
     clear()
     enemyMaxRemaining = 0
-    for (let i = 0; i < ENEMY_COUNT; i++) {
+    const fixedSpawnCount = Math.min(count, spawnPoints.length)
+    for (let i = 0; i < fixedSpawnCount; i++) {
       createEnemy(...spawnPoints[i], i)
     }
-    nextEnemyIndex = ENEMY_COUNT
+    nextEnemyIndex = fixedSpawnCount
+    for (let i = fixedSpawnCount; i < count; i++) respawnEnemy(playerPosition)
   }
 
   function createGrave(position) {
@@ -309,7 +312,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     muzzleFlashes.push({ mesh, life: 0 })
   }
 
-  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting, onImpact, maxMode, onPlayerShoot, otherPlayers, onPlayerHit) {
+  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting, onImpact, maxMode, onPlayerShoot, otherPlayers, onPlayerHit, aggression = 1) {
     const target = playerTruck.mesh.position
     enemyMaxRemaining = Math.max(0, enemyMaxRemaining - delta)
     const enemyMaxMode = enemyMaxRemaining > 0
@@ -339,24 +342,33 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       if (distance === 0) continue
       direction.normalize()
 
+      enemy.ramCooldown -= delta
+      if (enemy.ramTime > 0) {
+        enemy.ramTime -= delta
+      } else if (enemy.ramCooldown <= 0) {
+        enemy.ramTime = THREE.MathUtils.randFloat(2.2, 3.2)
+        enemy.ramCooldown = THREE.MathUtils.randFloat(5, 8) / aggression
+      }
+      const isRamming = enemy.ramTime > 0
+
       const targetHeading = Math.atan2(direction.x, direction.z)
       const angleDifference = Math.atan2(
         Math.sin(targetHeading - enemy.heading),
         Math.cos(targetHeading - enemy.heading),
       )
-      enemy.heading += THREE.MathUtils.clamp(angleDifference, -TURN_SPEED * delta, TURN_SPEED * delta)
+      enemy.heading += THREE.MathUtils.clamp(angleDifference, -TURN_SPEED * aggression * delta, TURN_SPEED * aggression * delta)
       enemy.mesh.rotation.y = enemy.heading
       enemy.shotRecoil *= Math.exp(-14 * delta)
       enemy.mesh.rotation.x = -enemy.shotRecoil
 
-      const desiredSpeed = distance > KEEP_DISTANCE
-        ? MOVE_SPEED * (enemyMaxMode ? ENEMY_MAX_SPEED_MULTIPLIER : 1)
-        : 0
+      const desiredSpeed = MOVE_SPEED
+        * (enemyMaxMode ? ENEMY_MAX_SPEED_MULTIPLIER : 1)
+        * (isRamming ? 1.35 : 1)
+        * aggression
       const speedBlend = 1 - Math.exp(-ACCELERATION_RESPONSE * delta)
       enemy.speed = THREE.MathUtils.lerp(enemy.speed, desiredSpeed, speedBlend)
       if (enemy.speed > 0.05) {
-        const forward = new THREE.Vector3(Math.sin(enemy.heading), 0, Math.cos(enemy.heading))
-        enemy.mesh.position.addScaledVector(forward, enemy.speed * delta)
+        enemy.mesh.position.addScaledVector(direction, enemy.speed * delta)
         enemy.mesh.position.x = THREE.MathUtils.clamp(enemy.mesh.position.x, -ROOM_BOUND, ROOM_BOUND)
         enemy.mesh.position.z = THREE.MathUtils.clamp(enemy.mesh.position.z, -ROOM_BOUND, ROOM_BOUND)
       }
@@ -374,15 +386,18 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         playerTruck.speed *= -0.5
         playerTruck.verticalVelocity = Math.max(playerTruck.verticalVelocity, 2.5)
 
+        const impactForce = Math.max(10, Math.abs(enemy.speed) * 1.25)
         enemy.speed = 0
         enemy.crashTimer = CRASH_DURATION
         enemy.crashCooldown = 2
+        enemy.ramTime = 0
+        enemy.ramCooldown = THREE.MathUtils.randFloat(5, 8) / aggression
         enemy.crashVelocity.copy(separation).multiplyScalar(7)
         enemy.crashSpin = (Math.random() < 0.5 ? -1 : 1) * THREE.MathUtils.randFloat(3.5, 5.5)
         enemy.health = Math.max(0, enemy.health - ENEMY_CRASH_DAMAGE)
         updateHealthBar(enemy.healthBar, enemy.health)
         createAccidentEffect(enemy.mesh.position, separation)
-        onCrash(CRASH_DAMAGE, separation.clone().negate())
+        onCrash(CRASH_DAMAGE, separation.clone().negate(), impactForce)
         if (enemy.health === 0) {
           destroyEnemy(enemy, target, onEnemyDestroyed)
         }
@@ -392,7 +407,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       enemy.cooldown -= delta
       if (distance <= FIRE_RANGE && enemy.cooldown <= 0) {
         fire(enemy, direction, enemyMaxMode)
-        enemy.cooldown = (FIRE_COOLDOWN + Math.random() * 0.35) * (enemyMaxMode ? 0.55 : 1)
+        enemy.cooldown = (FIRE_COOLDOWN + Math.random() * 0.35) * (enemyMaxMode ? 0.55 : 1) / aggression
       }
     }
 

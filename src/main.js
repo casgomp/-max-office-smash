@@ -2,18 +2,19 @@ import * as THREE from 'three'
 import { io } from 'socket.io-client'
 import './style.css'
 import { createScene, ROOM_SIZE } from './scene.js'
-import { createTruck, updateTruck, resetTruck, updateTruckHealth, applyTruckImpact } from './truck.js'
+import { createTruck, updateTruck, resetTruck, updateTruckHealth, applyTruckImpact, setTruckColor } from './truck.js'
 import { createInput } from './input.js'
 import { createFarmObjects, clearFarmObjects } from './farm.js'
 import { createFarmTrees, clearFarmTrees } from './farmTrees.js'
 import { createCollisionSystem } from './collision.js'
-import { createGameState, updateGameState, addScore, addTime, addMaxCharge, damagePlayer, healPlayer, isMaxMode, recordAnimalKill, recordDestroyedTruck, resetGameState } from './gameState.js'
+import { createGameState, updateGameState, addScore, addTime, addMaxCharge, damagePlayer, healPlayer, isMaxMode, recordAnimalKill, recordDestroyedTruck, resetGameState, setGameDuration } from './gameState.js'
 import { createUI } from './ui.js'
 import { recordRun, clearRuns } from './leaderboard.js'
 import { createEnemySystem } from './enemies.js'
 import { createVegetableSystem } from './vegetables.js'
-import { enableAnimalSounds, playAnimalHitSound } from './animalSounds.js'
-import { enableImpactSounds, playImpactSound } from './impactSounds.js'
+import { enableAnimalSounds, playAnimalHitSound, setAnimalSoundsEnabled } from './animalSounds.js'
+import { enableImpactSounds, playImpactSound, setImpactSoundsEnabled } from './impactSounds.js'
+import { enableGameEndSound, playGameEndSound, setGameEndSoundEnabled } from './gameEndSound.js'
 
 window.addEventListener('beforeunload', clearRuns)
 
@@ -37,7 +38,9 @@ setInterval(() => {
       x: truck.mesh.position.x,
       y: truck.mesh.position.y,
       z: truck.mesh.position.z,
-      rotation: truck.mesh.rotation.y
+      rotation: truck.mesh.rotation.y,
+      name: playerName,
+      color: selectedTruckColor,
     })
   }
 }, 100) // every 100ms = 10 times per second
@@ -61,6 +64,11 @@ socket.on('playerMoved', (data) => {
     const other = otherPlayers[data.id]
     other.mesh.position.set(data.x, data.y, data.z)
     other.mesh.rotation.y = data.rotation
+    if (data.color && data.color !== other.color) {
+      setTruckColor(other, data.color)
+      other.color = data.color
+    }
+    other.playerName = data.name || other.playerName || 'Player'
   }
 })
 
@@ -76,13 +84,9 @@ function spawnOtherPlayer(id, data) {
   const otherTruck = createTruck(scene) // reuses the same truck-building function as our own truck
   otherTruck.mesh.position.set(data.x, data.y, data.z)
   otherTruck.mesh.rotation.y = data.rotation
-  // give other players a different body color so you can tell them apart from yourself
-  // (truck.mesh is a Group, not a single Mesh, so recolor the body-colored parts via traverse)
-  otherTruck.mesh.traverse((child) => {
-    if (child.isMesh && child.material.color.getHex() === 0xd23c2e) {
-      child.material.color.set(0x3498db)
-    }
-  })
+  setTruckColor(otherTruck, data.color || 'blue')
+  otherTruck.color = data.color || 'blue'
+  otherTruck.playerName = data.name || 'Player'
   otherPlayers[id] = otherTruck
 }
 
@@ -126,8 +130,23 @@ let farmTrees = createFarmTrees(scene, projectileBlockers)
 let gameOverShown = false
 let started = false
 let playerName = 'Player'
+let selectedTruckColor = 'red'
+let difficultyMultiplier = 1
+let selectedEnemyCount = 5
 
-const ui = createUI({ onStart: startGame, onPlayAgain: returnToStart, farmSize: ROOM_SIZE })
+const ui = createUI({
+  onStart: startGame,
+  onPlayAgain: returnToStart,
+  onSoundChange: setSoundEnabled,
+  onTruckColorChange: (color) => {
+    selectedTruckColor = color
+    setTruckColor(truck, color)
+  },
+  onDurationChange: (seconds) => setGameDuration(gameState, seconds),
+  onDifficultyChange: setDifficulty,
+  onEnemyCountChange: (count) => { selectedEnemyCount = count },
+  farmSize: ROOM_SIZE,
+})
 
 const CAMERA_OFFSET = new THREE.Vector3(0, 27, -18)
 const CAMERA_LOOK_OFFSET = new THREE.Vector3(0, 1, 0)
@@ -190,9 +209,9 @@ function animate() {
         takeDamage(damage)
         applyTruckImpact(truck, direction, 4)
       },
-      (amount, direction) => {
+      (amount, direction, force = 10) => {
         takeDamage(amount)
-        applyTruckImpact(truck, direction, 10)
+        applyTruckImpact(truck, direction, force)
         playImpactSound('truck')
       },
       (points) => {
@@ -219,6 +238,7 @@ function animate() {
         console.log('[pvp] local hit detected on', targetId, '- emitting hitPlayer')
         socket.emit('hitPlayer', { targetId, damage: 15 })
       },
+      difficultyMultiplier * (1 + Math.min(gameState.elapsedTime / 90, 0.55)),
     )
     vegetableSystem.update(delta, truck, (amount, type) => {
       const healed = healPlayer(gameState, amount)
@@ -254,10 +274,12 @@ function animate() {
     enemySystem.getPositions(),
     farmObjects.filter((animal) => !animal.destroyed).map((animal) => animal.mesh.position),
     vegetableSystem.getPositions(),
+    Object.values(otherPlayers).map((other) => other.mesh.position),
   )
 
   if (started && gameState.isOver && !gameOverShown) {
     gameOverShown = true
+    playGameEndSound(gameState.endReason)
     const { rank, total, leaderboard, run } = recordRun(playerName, gameState.score)
     enemySystem.clearProjectiles()
     ui.showGameOver(
@@ -277,6 +299,7 @@ function animate() {
 function startGame(name) {
   enableAnimalSounds()
   enableImpactSounds()
+  enableGameEndSound()
   playerName = name
   resetGameState(gameState)
   resetTruck(truck)
@@ -285,7 +308,7 @@ function startGame(name) {
   farmObjects = createFarmObjects(scene)
   farmTrees = createFarmTrees(scene, projectileBlockers)
   collisionSystem.reset()
-  enemySystem.spawn()
+  enemySystem.spawn(selectedEnemyCount, truck.mesh.position)
   vegetableSystem.spawn()
   gameOverShown = false
   started = true
@@ -319,6 +342,17 @@ function takeDamage(amount) {
   if (damageTaken <= 0) return
   cameraShake = Math.max(cameraShake, Math.min(1.2, damageTaken / 25))
   ui.showDamage(damageTaken)
+}
+
+function setSoundEnabled(enabled) {
+  setAnimalSoundsEnabled(enabled)
+  setImpactSoundsEnabled(enabled)
+  setGameEndSoundEnabled(enabled)
+}
+
+function setDifficulty(level) {
+  const multipliers = { easy: 0.75, medium: 1, hard: 1.2, expert: 1.45 }
+  difficultyMultiplier = multipliers[level] ?? 1
 }
 
 function chargeMax(amount) {

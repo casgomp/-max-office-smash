@@ -8,6 +8,11 @@ const IMPACT_SOUNDS = {
 }
 
 const lastPlayed = new Map()
+let soundsEnabled = true
+
+export function setImpactSoundsEnabled(enabled) {
+  soundsEnabled = enabled
+}
 
 export function enableImpactSounds() {
   for (const profile of Object.values(IMPACT_SOUNDS)) {
@@ -18,6 +23,7 @@ export function enableImpactSounds() {
 }
 
 export function playImpactSound(type) {
+  if (!soundsEnabled) return
   const profile = IMPACT_SOUNDS[type] ?? IMPACT_SOUNDS.object
   const now = performance.now()
   if (now - (lastPlayed.get(type) ?? -Infinity) < profile.cooldown) return

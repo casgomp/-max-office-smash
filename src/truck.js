@@ -243,7 +243,23 @@ export function createTruck(scene) {
     impactSpin: 0,
     shotRecoil: 0,
     healthBar,
+    bodyMaterial,
+    accentMaterial,
   }
+}
+
+const TRUCK_COLOR_SCHEMES = {
+  red: { body: 0xd23c2e, accent: 0xf4c542 },
+  blue: { body: 0x2563c7, accent: 0x7dd3fc },
+  green: { body: 0x2f7d45, accent: 0xf2cc4d },
+  orange: { body: 0xd86b18, accent: 0xffd166 },
+  purple: { body: 0x7138a8, accent: 0xe9a8ff },
+}
+
+export function setTruckColor(truck, colorName) {
+  const scheme = TRUCK_COLOR_SCHEMES[colorName] ?? TRUCK_COLOR_SCHEMES.red
+  truck.bodyMaterial.color.setHex(scheme.body)
+  truck.accentMaterial.color.setHex(scheme.accent)
 }
 
 export function updateTruckHealth(truck, health) {

@@ -204,10 +204,46 @@ body.max-mode #app canvas {
   line-height: 1.5;
 }
 
+#start-screen .menu-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+#start-screen .menu-view.hidden { display: none; }
+
+#start-screen .menu-view label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #eee;
+  text-align: left;
+  font-size: 16px;
+}
+
+#truck-color-option,
+#duration-option,
+#difficulty-option,
+#enemy-count-option {
+  margin-left: auto;
+  padding: 6px 9px;
+  border: 1px solid #bbb;
+  border-radius: 5px;
+  background: #fff;
+  color: #111;
+  font: 15px system-ui, sans-serif;
+}
+
+#start-screen button.secondary { background: #66717e; }
+#start-screen button.secondary:hover { background: #505963; }
+
 #player-name {
   box-sizing: border-box;
   width: 100%;
-  margin: 16px 0;
+  margin: 4px 0;
   padding: 10px 12px;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -216,7 +252,7 @@ body.max-mode #app canvas {
 
 #leaderboard-list {
   max-height: 220px;
-  margin: 16px 0 20px;
+  margin: 4px 0 20px;
   padding: 0 0 0 24px;
   overflow-y: auto;
   text-align: left;
@@ -224,11 +260,32 @@ body.max-mode #app canvas {
 }
 
 #leaderboard-list li {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 4px 6px;
   border-radius: 4px;
+}
+
+#leaderboard-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin: 16px 6px 0 24px;
+  padding: 0 6px 6px;
+  border-bottom: 1px solid #ccc;
+  color: #555;
+  text-align: left;
+  font: 700 14px system-ui, sans-serif;
+}
+
+#leaderboard-header span:last-child,
+#leaderboard-list li span:last-child { text-align: right; }
+
+#leaderboard-list li span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #leaderboard-list li.current {
