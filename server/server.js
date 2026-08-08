@@ -13,6 +13,17 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 const players = {}; // keeps track of every connected player's data
+const playerSpawnSlots = new Map();
+const spawnPoints = [
+  { x: -45, y: 0, z: -45, rotation: Math.PI * 0.25 },
+  { x: 45, y: 0, z: 45, rotation: -Math.PI * 0.75 },
+  { x: 45, y: 0, z: -45, rotation: -Math.PI * 0.25 },
+  { x: -45, y: 0, z: 45, rotation: Math.PI * 0.75 },
+  { x: 0, y: 0, z: -55, rotation: 0 },
+  { x: 0, y: 0, z: 55, rotation: Math.PI },
+  { x: -55, y: 0, z: 0, rotation: Math.PI * 0.5 },
+  { x: 55, y: 0, z: 0, rotation: -Math.PI * 0.5 },
+];
 const leaderboard = [];
 const submittedRunIds = new Set();
 
@@ -26,8 +37,17 @@ function getLeaderboardPayload() {
 io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
 
+  const occupiedSlots = new Set(playerSpawnSlots.values());
+  let spawnSlot = spawnPoints.findIndex((_point, index) => !occupiedSlots.has(index));
+  if (spawnSlot < 0) spawnSlot = Math.floor(Math.random() * spawnPoints.length);
+  playerSpawnSlots.set(socket.id, spawnSlot);
+  const spawn = spawnPoints[spawnSlot];
+  players[socket.id] = { ...spawn, name: 'Player', color: 'red', health: 100, alive: false };
+
   // tell the newly connected player about everyone already here
   socket.emit('currentPlayers', players);
+  socket.emit('spawnPosition', spawn);
+  socket.broadcast.emit('playerMoved', { id: socket.id, ...players[socket.id] });
 
   // when this player sends their position, save it and tell everyone else
   socket.on('updatePosition', (data) => {
@@ -76,6 +96,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Player disconnected:', socket.id);
     delete players[socket.id];
+    playerSpawnSlots.delete(socket.id);
     io.emit('playerLeft', socket.id); // tell everyone this player is gone
   });
 });

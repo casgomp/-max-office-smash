@@ -30,6 +30,12 @@ socket.on('disconnect', () => {
 
 const { scene, camera, renderer, projectileBlockers } = createScene()
 const truck = createTruck(scene)
+let assignedSpawn = { x: 0, y: 0, z: 0, rotation: 0 }
+
+socket.on('spawnPosition', (spawn) => {
+  assignedSpawn = spawn
+  if (!started) placeTruckAtAssignedSpawn()
+})
 
 // send our position to the server, a few times per second (not every frame - that's excessive)
 setInterval(() => {
@@ -42,6 +48,7 @@ setInterval(() => {
       name: playerName,
       color: selectedTruckColor,
       health: gameState.health,
+      alive: started && !gameState.isOver,
     })
   }
 }, 100) // every 100ms = 10 times per second
@@ -63,14 +70,15 @@ socket.on('playerMoved', (data) => {
     spawnOtherPlayer(data.id, data)
   } else {
     const other = otherPlayers[data.id]
-    other.mesh.position.set(data.x, data.y, data.z)
-    other.mesh.rotation.y = data.rotation
+    other.networkTargetPosition.set(data.x, data.y, data.z)
+    other.networkTargetRotation = data.rotation
     if (data.color && data.color !== other.color) {
       setTruckColor(other, data.color)
       other.color = data.color
     }
     other.playerName = data.name || other.playerName || 'Player'
     if (Number.isFinite(data.health)) updateTruckHealth(other, data.health)
+    other.mesh.visible = data.alive !== false
   }
 })
 
@@ -90,6 +98,9 @@ function spawnOtherPlayer(id, data) {
   otherTruck.color = data.color || 'blue'
   otherTruck.playerName = data.name || 'Player'
   otherTruck.pvpCrashCooldown = 0
+  otherTruck.mesh.visible = data.alive !== false
+  otherTruck.networkTargetPosition = new THREE.Vector3(data.x, data.y, data.z)
+  otherTruck.networkTargetRotation = data.rotation
   if (Number.isFinite(data.health)) updateTruckHealth(otherTruck, data.health)
   otherPlayers[id] = otherTruck
 }
@@ -260,6 +271,7 @@ function animate() {
     })
   }
   collisionSystem.updateFlyingObjects(delta)
+  updateOtherPlayers(delta)
   for (let i = remoteProjectiles.length - 1; i >= 0; i--) {
     const projectile = remoteProjectiles[i]
     projectile.mesh.position.addScaledVector(projectile.velocity, delta)
@@ -286,13 +298,14 @@ function animate() {
     enemySystem.getPositions(),
     farmObjects.filter((animal) => !animal.destroyed).map((animal) => animal.mesh.position),
     vegetableSystem.getPositions(),
-    Object.values(otherPlayers).map((other) => other.mesh.position),
+    Object.values(otherPlayers).filter((other) => other.mesh.visible).map((other) => other.mesh.position),
   )
 
   if (started && gameState.isOver && !gameOverShown) {
     gameOverShown = true
     playGameEndSound(gameState.endReason)
     enemySystem.clearProjectiles()
+    if (gameState.endReason === 'destroyed') truck.mesh.visible = false
     showSharedResults()
   }
 
@@ -307,6 +320,8 @@ function startGame(name) {
   currentMultiplayerRun = null
   resetGameState(gameState)
   resetTruck(truck)
+  truck.mesh.visible = true
+  placeTruckAtAssignedSpawn()
   clearFarmObjects(scene, farmObjects)
   clearFarmTrees(scene, farmTrees)
   farmObjects = createFarmObjects(scene)
@@ -354,13 +369,13 @@ function showSharedResults() {
   }
 
   if (!socket.connected) {
-    showResults(recordRun(playerName, gameState.score))
+    showResults(recordRun(playerName, gameState.score, gameState.destroyedTrucks))
     return
   }
 
   socket.timeout(2500).emit('submitScore', result, (error, response) => {
     if (error || !response?.leaderboard) {
-      showResults(recordRun(playerName, gameState.score))
+      showResults(recordRun(playerName, gameState.score, gameState.destroyedTrucks))
       return
     }
     showResults(response)
@@ -375,6 +390,12 @@ function returnToStart() {
   ui.showStart()
 }
 
+function placeTruckAtAssignedSpawn() {
+  truck.mesh.position.set(assignedSpawn.x, assignedSpawn.y, assignedSpawn.z)
+  truck.heading = assignedSpawn.rotation
+  truck.mesh.rotation.y = assignedSpawn.rotation
+}
+
 function takeDamage(amount) {
   const previousHealth = gameState.health
   damagePlayer(gameState, amount)
@@ -386,6 +407,7 @@ function takeDamage(amount) {
 
 function checkMultiplayerTruckCollisions(delta) {
   for (const [id, other] of Object.entries(otherPlayers)) {
+    if (!other.mesh.visible) continue
     other.pvpCrashCooldown = Math.max(0, (other.pvpCrashCooldown || 0) - delta)
 
     const separation = new THREE.Vector3().subVectors(truck.mesh.position, other.mesh.position).setY(0)
@@ -412,6 +434,22 @@ function checkMultiplayerTruckCollisions(delta) {
       type: 'crash',
       force: impactForce,
     })
+  }
+}
+
+function updateOtherPlayers(delta) {
+  const positionBlend = 1 - Math.exp(-14 * delta)
+  const rotationBlend = 1 - Math.exp(-18 * delta)
+
+  for (const other of Object.values(otherPlayers)) {
+    if (!other.networkTargetPosition) continue
+    other.mesh.position.lerp(other.networkTargetPosition, positionBlend)
+
+    const angleDifference = Math.atan2(
+      Math.sin(other.networkTargetRotation - other.mesh.rotation.y),
+      Math.cos(other.networkTargetRotation - other.mesh.rotation.y),
+    )
+    other.mesh.rotation.y += angleDifference * rotationBlend
   }
 }
 

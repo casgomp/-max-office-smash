@@ -9,9 +9,9 @@ export function loadRuns() {
   }
 }
 
-export function recordRun(name, score) {
+export function recordRun(name, score, destroyedTrucks = 0) {
   const runs = loadRuns()
-  const run = { name, score }
+  const run = { name, score, destroyedTrucks }
   runs.push(run)
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(runs))
 

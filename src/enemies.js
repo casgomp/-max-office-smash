@@ -487,6 +487,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       let hitPlayerId = null
       if (!hitEnemy && otherPlayers) {
         for (const id in otherPlayers) {
+          if (!otherPlayers[id].mesh.visible) continue
           const dx = projectile.mesh.position.x - otherPlayers[id].mesh.position.x
           const dz = projectile.mesh.position.z - otherPlayers[id].mesh.position.z
           if (dx * dx + dz * dz <= OTHER_PLAYER_HIT_RADIUS * OTHER_PLAYER_HIT_RADIUS) {

@@ -74,7 +74,7 @@ export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChan
       <p id="final-score">Final Score: 0</p>
       <p id="final-rank">Rank: -</p>
       <p id="final-destroyed">Trucks Destroyed: 0</p>
-      <div id="leaderboard-header"><span>Player</span><span>Score</span></div>
+      <div id="leaderboard-header"><span>Player</span><span>Score</span><span>Enemy</span></div>
       <ol id="leaderboard-list"></ol>
       <button id="play-again-button" type="button">Play Again</button>
     </div>
@@ -278,7 +278,7 @@ function renderLeaderboard(element, leaderboard, currentRun) {
     .map((run) => {
       const isCurrent = run === currentRun || (run.id && run.id === currentRun?.id)
       const current = isCurrent ? ' class="current"' : ''
-      return `<li${current}><span>${escapeHtml(run.name)}</span><span>${run.score}</span></li>`
+      return `<li${current}><span>${escapeHtml(run.name)}</span><span>${run.score}</span><span>${run.destroyedTrucks ?? 0}</span></li>`
     })
     .join('')
 }

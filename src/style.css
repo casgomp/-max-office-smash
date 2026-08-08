@@ -269,7 +269,7 @@ body.max-mode #app canvas {
 
 #leaderboard-header {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) 52px 52px;
   gap: 12px;
   margin: 16px 6px 0 24px;
   padding: 0 6px 6px;
@@ -279,13 +279,17 @@ body.max-mode #app canvas {
   font: 700 14px system-ui, sans-serif;
 }
 
-#leaderboard-header span:last-child,
-#leaderboard-list li span:last-child { text-align: right; }
+#leaderboard-header span:not(:first-child),
+#leaderboard-list li span:not(:first-child) { text-align: right; }
 
 #leaderboard-list li span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#leaderboard-list li {
+  grid-template-columns: minmax(0, 1fr) 52px 52px;
 }
 
 #leaderboard-list li.current {
