@@ -197,8 +197,7 @@ function animate() {
     if (hitFence && Math.abs(truck.speed) > 1) playImpactSound('fence')
     checkSolidSceneryCollision()
     checkMultiplayerTruckCollisions(delta)
-    collisionSystem.checkCollisions(truck, farmObjects, (points, animal) => {
-      addScore(gameState, points)
+    collisionSystem.checkCollisions(truck, farmObjects, (_points, animal) => {
       chargeMax(8)
       if (recordAnimalKill(gameState)) {
         enemySystem.activateMaxMode(3)
