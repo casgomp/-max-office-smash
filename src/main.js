@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { io } from 'socket.io-client'
 import './style.css'
 import { createScene, ROOM_SIZE } from './scene.js'
 import { createTruck, updateTruck, resetTruck, updateTruckHealth, applyTruckImpact } from './truck.js'
@@ -16,8 +17,103 @@ import { enableImpactSounds, playImpactSound } from './impactSounds.js'
 
 window.addEventListener('beforeunload', clearRuns)
 
+const socket = io('http://localhost:3000')
+
+socket.on('connect', () => {
+  console.log('Connected to server! My id is:', socket.id)
+})
+
+socket.on('disconnect', () => {
+  console.log('Disconnected from server')
+})
+
 const { scene, camera, renderer, projectileBlockers } = createScene()
 const truck = createTruck(scene)
+
+// send our position to the server, a few times per second (not every frame - that's excessive)
+setInterval(() => {
+  if (socket.connected) {
+    socket.emit('updatePosition', {
+      x: truck.mesh.position.x,
+      y: truck.mesh.position.y,
+      z: truck.mesh.position.z,
+      rotation: truck.mesh.rotation.y
+    })
+  }
+}, 100) // every 100ms = 10 times per second
+
+const otherPlayers = {} // id -> truck object (same shape createTruck returns) for every other player
+
+// when we first connect, spawn trucks for anyone already in the game
+socket.on('currentPlayers', (players) => {
+  for (const id in players) {
+    if (id !== socket.id) {
+      spawnOtherPlayer(id, players[id])
+    }
+  }
+})
+
+// when another player moves, either spawn them (first time we see them) or update their position
+socket.on('playerMoved', (data) => {
+  if (!otherPlayers[data.id]) {
+    spawnOtherPlayer(data.id, data)
+  } else {
+    const other = otherPlayers[data.id]
+    other.mesh.position.set(data.x, data.y, data.z)
+    other.mesh.rotation.y = data.rotation
+  }
+})
+
+// when a player leaves, remove their truck from the scene
+socket.on('playerLeft', (id) => {
+  if (otherPlayers[id]) {
+    scene.remove(otherPlayers[id].mesh)
+    delete otherPlayers[id]
+  }
+})
+
+function spawnOtherPlayer(id, data) {
+  const otherTruck = createTruck(scene) // reuses the same truck-building function as our own truck
+  otherTruck.mesh.position.set(data.x, data.y, data.z)
+  otherTruck.mesh.rotation.y = data.rotation
+  // give other players a different body color so you can tell them apart from yourself
+  // (truck.mesh is a Group, not a single Mesh, so recolor the body-colored parts via traverse)
+  otherTruck.mesh.traverse((child) => {
+    if (child.isMesh && child.material.color.getHex() === 0xd23c2e) {
+      child.material.color.set(0x3498db)
+    }
+  })
+  otherPlayers[id] = otherTruck
+}
+
+// cosmetic-only projectiles for other players' shots (hit detection stays local to the shooter's client)
+const remoteProjectiles = []
+const REMOTE_PROJECTILE_SPEED = 20
+const REMOTE_PROJECTILE_LIFETIME = 4
+const remoteProjectileGeometry = new THREE.SphereGeometry(0.22, 8, 8)
+const remoteProjectileMaterial = new THREE.MeshBasicMaterial({ color: 0x42baff })
+
+// when another player fires, spawn a visual-only projectile for their shot
+socket.on('otherPlayerShoot', (data) => {
+  const direction = new THREE.Vector3(Math.sin(data.rotation), 0, Math.cos(data.rotation))
+  const mesh = new THREE.Mesh(remoteProjectileGeometry, remoteProjectileMaterial)
+  mesh.position.set(data.x, data.y + 1.5, data.z).addScaledVector(direction, 2.2)
+  scene.add(mesh)
+  remoteProjectiles.push({ mesh, velocity: direction.multiplyScalar(REMOTE_PROJECTILE_SPEED), life: 0 })
+})
+
+// when the server tells you that YOU got hit
+socket.on('youWereHit', (data) => {
+  takeDamage(data.damage)
+  const shooter = otherPlayers[data.fromId]
+  const recoil = shooter
+    ? new THREE.Vector3().subVectors(truck.mesh.position, shooter.mesh.position).setY(0)
+    : new THREE.Vector3(0, 0, 1)
+  if (recoil.lengthSq() < 0.001) recoil.set(0, 0, 1)
+  else recoil.normalize()
+  applyTruckImpact(truck, recoil, 4)
+  playImpactSound('truck')
+})
 const input = createInput()
 const collisionSystem = createCollisionSystem(scene)
 const gameState = createGameState()
@@ -108,6 +204,19 @@ function animate() {
       input.shoot,
       (type) => playImpactSound(type),
       isMaxMode(gameState),
+      () => {
+        // tell the server we fired, so other clients can see the projectile too
+        socket.emit('playerShoot', {
+          x: truck.mesh.position.x,
+          y: truck.mesh.position.y,
+          z: truck.mesh.position.z,
+          rotation: truck.mesh.rotation.y
+        })
+      },
+      otherPlayers,
+      (targetId) => {
+        socket.emit('hitPlayer', { targetId, damage: 15 })
+      },
     )
     vegetableSystem.update(delta, truck, (amount, type) => {
       const healed = healPlayer(gameState, amount)
@@ -117,6 +226,15 @@ function animate() {
     })
   }
   collisionSystem.updateFlyingObjects(delta)
+  for (let i = remoteProjectiles.length - 1; i >= 0; i--) {
+    const projectile = remoteProjectiles[i]
+    projectile.mesh.position.addScaledVector(projectile.velocity, delta)
+    projectile.life += delta
+    if (projectile.life >= REMOTE_PROJECTILE_LIFETIME) {
+      scene.remove(projectile.mesh)
+      remoteProjectiles.splice(i, 1)
+    }
+  }
   updateCamera(delta)
 
   ui.updateHUD(

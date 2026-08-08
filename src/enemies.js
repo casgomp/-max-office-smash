@@ -22,6 +22,7 @@ const PLAYER_PROJECTILE_SPEED = 20
 const PLAYER_PROJECTILE_DAMAGE = 40
 const ENEMY_HEALTH = 100
 const ENEMY_HIT_RADIUS = 1.8
+const OTHER_PLAYER_HIT_RADIUS = 1.8
 const ENEMY_MAX_SPEED_MULTIPLIER = 1.55
 const ENEMY_MAX_PROJECTILE_DAMAGE = 10
 const ROOM_BOUND = ROOM_SIZE / 2 - WALL_THICKNESS - 1
@@ -308,7 +309,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     muzzleFlashes.push({ mesh, life: 0 })
   }
 
-  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting, onImpact, maxMode) {
+  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting, onImpact, maxMode, onPlayerShoot, otherPlayers, onPlayerHit) {
     const target = playerTruck.mesh.position
     enemyMaxRemaining = Math.max(0, enemyMaxRemaining - delta)
     const enemyMaxMode = enemyMaxRemaining > 0
@@ -316,6 +317,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     if (playerShooting && playerFireCooldown <= 0) {
       firePlayer(playerTruck, maxMode)
       playerFireCooldown = PLAYER_FIRE_COOLDOWN
+      if (onPlayerShoot) onPlayerShoot()
     }
 
     for (const enemy of enemies) {
@@ -467,12 +469,29 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         }
       }
 
+      let hitPlayerId = null
+      if (!hitEnemy && otherPlayers) {
+        for (const id in otherPlayers) {
+          const dx = projectile.mesh.position.x - otherPlayers[id].mesh.position.x
+          const dz = projectile.mesh.position.z - otherPlayers[id].mesh.position.z
+          if (dx * dx + dz * dz <= OTHER_PLAYER_HIT_RADIUS * OTHER_PLAYER_HIT_RADIUS) {
+            hitPlayerId = id
+            break
+          }
+        }
+      }
+      if (hitPlayerId) {
+        onImpact('bullet')
+        createAccidentEffect(projectile.mesh.position, projectile.velocity.clone().normalize())
+        if (onPlayerHit) onPlayerHit(hitPlayerId)
+      }
+
       const outOfBounds = Math.abs(projectile.mesh.position.x) > ROOM_BOUND
         || Math.abs(projectile.mesh.position.z) > ROOM_BOUND
       const hitScenery = hitsScenery(projectile.mesh.position)
       if (hitScenery) createMuzzleFlash(projectile.mesh.position, 0x42baff)
       if (hitScenery) onImpact('bullet')
-      if (hitEnemy || hitScenery || outOfBounds || projectile.life >= PROJECTILE_LIFETIME) {
+      if (hitEnemy || hitPlayerId || hitScenery || outOfBounds || projectile.life >= PROJECTILE_LIFETIME) {
         scene.remove(projectile.mesh)
         playerProjectiles.splice(i, 1)
       }
