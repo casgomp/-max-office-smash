@@ -227,7 +227,7 @@ function addBarn(scene, projectileBlockers) {
   group.add(door)
   group.position.set(-55, 0, -65)
   scene.add(group)
-  projectileBlockers.push({ x: -55, z: -65, radius: 5 })
+  projectileBlockers.push({ x: -55, z: -65, radius: 5, kind: 'barn' })
 }
 
 function addSilo(scene, projectileBlockers) {
@@ -243,7 +243,7 @@ function addSilo(scene, projectileBlockers) {
   silo.add(roof)
   silo.position.set(55, 0, -65)
   scene.add(silo)
-  projectileBlockers.push({ x: 55, z: -65, radius: 2.5 })
+  projectileBlockers.push({ x: 55, z: -65, radius: 2.5, kind: 'silo' })
 }
 
 function addCropRows(scene) {

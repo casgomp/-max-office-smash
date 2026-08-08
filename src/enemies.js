@@ -3,9 +3,9 @@ import { ROOM_SIZE, WALL_THICKNESS, getFarmBumpHeight } from './scene.js'
 import { createHealthBar, updateHealthBar } from './healthBar.js'
 
 const ENEMY_COUNT = 5
-const MOVE_SPEED = 7
+const MOVE_SPEED = 10
 const TURN_SPEED = 2.8
-const ACCELERATION_RESPONSE = 3.5
+const ACCELERATION_RESPONSE = 4.5
 const KEEP_DISTANCE = 9
 const FIRE_RANGE = 24
 const FIRE_COOLDOWN = 1.15
@@ -22,6 +22,8 @@ const PLAYER_PROJECTILE_SPEED = 20
 const PLAYER_PROJECTILE_DAMAGE = 40
 const ENEMY_HEALTH = 100
 const ENEMY_HIT_RADIUS = 1.8
+const ENEMY_MAX_SPEED_MULTIPLIER = 1.55
+const ENEMY_MAX_PROJECTILE_DAMAGE = 10
 const ROOM_BOUND = ROOM_SIZE / 2 - WALL_THICKNESS - 1
 
 const spawnPoints = [
@@ -48,6 +50,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
   const graves = []
   let playerFireCooldown = 0
   let nextEnemyIndex = ENEMY_COUNT
+  let enemyMaxRemaining = 0
   const projectileGeometry = new THREE.SphereGeometry(0.2, 12, 8)
   const projectileMaterial = new THREE.MeshStandardMaterial({
     color: 0xff7b22,
@@ -110,6 +113,34 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       group.add(exhaust)
     }
 
+    const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x76502f, roughness: 0.95 })
+    const hayMaterial = new THREE.MeshStandardMaterial({ color: 0xd4a52e, roughness: 1 })
+    const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.15, 1.35), woodMaterial)
+    bedFloor.position.set(0, 1.72, -1.15)
+    group.add(bedFloor)
+    for (const sideX of [-1, 1]) {
+      const bedRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.58, 1.45), woodMaterial)
+      bedRail.position.set(sideX, 2, -1.15)
+      bedRail.castShadow = true
+      group.add(bedRail)
+    }
+    const hayBale = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.82, 14), hayMaterial)
+    hayBale.rotation.z = Math.PI / 2
+    hayBale.position.set(0, 2.15, -1.15)
+    hayBale.castShadow = true
+    group.add(hayBale)
+
+    const beacon = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.18, 0.28, 10),
+      new THREE.MeshStandardMaterial({
+        color: 0xffa51f,
+        emissive: 0xff7a00,
+        emissiveIntensity: 0.8,
+      }),
+    )
+    beacon.position.set(0, 2.82, -0.25)
+    group.add(beacon)
+
     const wheelGeometry = new THREE.CylinderGeometry(0.65, 0.65, 0.45, 16)
     for (const wheelX of [-1.15, 1.15]) {
       for (const wheelZ of [-1.1, 1.1]) {
@@ -141,6 +172,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
 
   function spawn() {
     clear()
+    enemyMaxRemaining = 0
     for (let i = 0; i < ENEMY_COUNT; i++) {
       createEnemy(...spawnPoints[i], i)
     }
@@ -215,29 +247,37 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     respawnEnemy(playerPosition)
   }
 
-  function fire(enemy, direction) {
+  function fire(enemy, direction, maxMode) {
     const mesh = createProjectileVisual(projectileMaterial, 0xff5b22, direction)
+    if (maxMode) mesh.scale.setScalar(1.55)
     mesh.position.copy(enemy.mesh.position).setY(1.5).addScaledVector(direction, 2.2)
     scene.add(mesh)
-    projectiles.push({ mesh, velocity: direction.clone().multiplyScalar(PROJECTILE_SPEED), life: 0 })
+    projectiles.push({
+      mesh,
+      velocity: direction.clone().multiplyScalar(PROJECTILE_SPEED * (maxMode ? 1.45 : 1)),
+      life: 0,
+      damage: maxMode ? ENEMY_MAX_PROJECTILE_DAMAGE : 5,
+    })
     enemy.shotRecoil = 0.13
     createMuzzleFlash(mesh.position, 0xff7b22)
   }
 
-  function firePlayer(playerTruck) {
+  function firePlayer(playerTruck, maxMode) {
     const direction = new THREE.Vector3(
       Math.sin(playerTruck.heading),
       0,
       Math.cos(playerTruck.heading),
     )
     const mesh = createProjectileVisual(playerProjectileMaterial, 0x42baff, direction)
+    if (maxMode) mesh.scale.setScalar(1.8)
     mesh.position.copy(playerTruck.mesh.position).setY(playerTruck.mesh.position.y + 1.5)
     mesh.position.addScaledVector(direction, 2.2)
     scene.add(mesh)
     playerProjectiles.push({
       mesh,
-      velocity: direction.multiplyScalar(PLAYER_PROJECTILE_SPEED),
+      velocity: direction.multiplyScalar(PLAYER_PROJECTILE_SPEED * (maxMode ? 1.5 : 1)),
       life: 0,
+      damage: PLAYER_PROJECTILE_DAMAGE * (maxMode ? 2 : 1),
     })
     playerTruck.shotRecoil = 0.11
     createMuzzleFlash(mesh.position, 0x42baff)
@@ -268,11 +308,13 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     muzzleFlashes.push({ mesh, life: 0 })
   }
 
-  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting) {
+  function update(delta, playerTruck, onHit, onCrash, onEnemyDestroyed, playerShooting, onImpact, maxMode) {
     const target = playerTruck.mesh.position
+    enemyMaxRemaining = Math.max(0, enemyMaxRemaining - delta)
+    const enemyMaxMode = enemyMaxRemaining > 0
     playerFireCooldown = Math.max(0, playerFireCooldown - delta)
     if (playerShooting && playerFireCooldown <= 0) {
-      firePlayer(playerTruck)
+      firePlayer(playerTruck, maxMode)
       playerFireCooldown = PLAYER_FIRE_COOLDOWN
     }
 
@@ -305,7 +347,9 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       enemy.shotRecoil *= Math.exp(-14 * delta)
       enemy.mesh.rotation.x = -enemy.shotRecoil
 
-      const desiredSpeed = distance > KEEP_DISTANCE ? MOVE_SPEED : 0
+      const desiredSpeed = distance > KEEP_DISTANCE
+        ? MOVE_SPEED * (enemyMaxMode ? ENEMY_MAX_SPEED_MULTIPLIER : 1)
+        : 0
       const speedBlend = 1 - Math.exp(-ACCELERATION_RESPONSE * delta)
       enemy.speed = THREE.MathUtils.lerp(enemy.speed, desiredSpeed, speedBlend)
       if (enemy.speed > 0.05) {
@@ -345,8 +389,8 @@ export function createEnemySystem(scene, projectileBlockers = []) {
 
       enemy.cooldown -= delta
       if (distance <= FIRE_RANGE && enemy.cooldown <= 0) {
-        fire(enemy, direction)
-        enemy.cooldown = FIRE_COOLDOWN + Math.random() * 0.35
+        fire(enemy, direction, enemyMaxMode)
+        enemy.cooldown = (FIRE_COOLDOWN + Math.random() * 0.35) * (enemyMaxMode ? 0.55 : 1)
       }
     }
 
@@ -372,6 +416,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         }
         const crashPoint = first.mesh.position.clone().add(second.mesh.position).multiplyScalar(0.5)
         createAccidentEffect(crashPoint, separation)
+        onImpact('truck')
       }
     }
 
@@ -385,8 +430,10 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       const hitPlayer = dx * dx + dz * dz <= HIT_RADIUS * HIT_RADIUS
       const outOfBounds = Math.abs(projectile.mesh.position.x) > ROOM_BOUND || Math.abs(projectile.mesh.position.z) > ROOM_BOUND
       const hitScenery = hitsScenery(projectile.mesh.position)
-      if (hitPlayer) onHit(projectile.velocity.clone().normalize())
+      if (hitPlayer) onHit(projectile.velocity.clone().normalize(), projectile.damage)
+      if (hitPlayer) onImpact('bullet')
       if (hitScenery) createMuzzleFlash(projectile.mesh.position, 0xff7b22)
+      if (hitScenery) onImpact('bullet')
       if (hitPlayer || hitScenery || outOfBounds || projectile.life >= PROJECTILE_LIFETIME) {
         scene.remove(projectile.mesh)
         projectiles.splice(i, 1)
@@ -409,7 +456,8 @@ export function createEnemySystem(scene, projectileBlockers = []) {
       }
 
       if (hitEnemy) {
-        hitEnemy.health -= PLAYER_PROJECTILE_DAMAGE
+        onImpact('bullet')
+        hitEnemy.health -= projectile.damage
         updateHealthBar(hitEnemy.healthBar, hitEnemy.health)
         hitEnemy.crashTimer = Math.max(hitEnemy.crashTimer, 0.25)
         hitEnemy.crashVelocity.copy(projectile.velocity).normalize().multiplyScalar(2.5)
@@ -423,6 +471,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         || Math.abs(projectile.mesh.position.z) > ROOM_BOUND
       const hitScenery = hitsScenery(projectile.mesh.position)
       if (hitScenery) createMuzzleFlash(projectile.mesh.position, 0x42baff)
+      if (hitScenery) onImpact('bullet')
       if (hitEnemy || hitScenery || outOfBounds || projectile.life >= PROJECTILE_LIFETIME) {
         scene.remove(projectile.mesh)
         playerProjectiles.splice(i, 1)
@@ -435,6 +484,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
 
   function hitsScenery(position) {
     for (const blocker of projectileBlockers) {
+      if (blocker.active === false) continue
       const dx = position.x - blocker.x
       const dz = position.z - blocker.z
       if (dx * dx + dz * dz <= blocker.radius * blocker.radius) return true
@@ -519,11 +569,16 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     clearProjectiles()
     for (const grave of graves) scene.remove(grave)
     graves.length = 0
+    enemyMaxRemaining = 0
   }
 
   function getPositions() {
     return enemies.map((enemy) => enemy.mesh.position)
   }
 
-  return { spawn, update, clear, clearProjectiles, getPositions }
+  function activateMaxMode(seconds = 3) {
+    enemyMaxRemaining = Math.max(enemyMaxRemaining, seconds)
+  }
+
+  return { spawn, update, clear, clearProjectiles, getPositions, activateMaxMode }
 }

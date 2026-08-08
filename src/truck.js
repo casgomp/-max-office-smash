@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import { ROOM_SIZE, WALL_THICKNESS, getFarmBumpHeight } from './scene.js'
 import { createHealthBar, updateHealthBar } from './healthBar.js'
 
-const ACCELERATION = 16
-const MAX_SPEED = 17
+const ACCELERATION = 21
+const MAX_SPEED = 22
 const TURN_SPEED = 2.2
 const FRICTION = 4
 const STEER_ANGLE_MAX = 0.5
@@ -11,8 +11,8 @@ const SUSPENSION_STRENGTH = 38
 const SUSPENSION_DAMPING = 7
 const IMPACT_DRAG = 5
 const IMPACT_SPIN_DRAG = 6
-const BUMP_SPEED_BONUS = 6
-const BUMP_ACCELERATION = 14
+const BUMP_SPEED_BONUS = 8
+const BUMP_ACCELERATION = 18
 
 const ROOM_BOUND = ROOM_SIZE / 2 - WALL_THICKNESS / 2
 
@@ -142,6 +142,32 @@ export function createTruck(scene) {
   spareRim.position.copy(spareTire.position)
   truckGroup.add(spareRim)
 
+  const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x81552f, roughness: 0.95 })
+  const hayMaterial = new THREE.MeshStandardMaterial({ color: 0xd6a834, roughness: 1 })
+  const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.16, 1.35), woodMaterial)
+  bedFloor.position.set(0, CHASSIS_Y + 0.55, -1.0)
+  truckGroup.add(bedFloor)
+  for (const x of [-0.9, 0.9]) {
+    const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.65, 1.4), woodMaterial)
+    sideRail.position.set(x, CHASSIS_Y + 0.9, -1.0)
+    sideRail.castShadow = true
+    truckGroup.add(sideRail)
+  }
+  const hayBale = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.85, 14), hayMaterial)
+  hayBale.rotation.z = Math.PI / 2
+  hayBale.position.set(0, CHASSIS_Y + 1.05, -1.0)
+  hayBale.castShadow = true
+  truckGroup.add(hayBale)
+
+  const beaconMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffa51f,
+    emissive: 0xff7a00,
+    emissiveIntensity: 0.8,
+  })
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 10), beaconMaterial)
+  beacon.position.set(0, CHASSIS_Y + 2.42, -0.1)
+  truckGroup.add(beacon)
+
   const chassisBottomY = CHASSIS_Y - CHASSIS_HALF_HEIGHT
 
   for (const z of [WHEEL_FRONT_Z, WHEEL_REAR_Z]) {
@@ -239,9 +265,10 @@ export function resetTruck(truck) {
   }
 }
 
-export function updateTruck(truck, input, delta) {
+export function updateTruck(truck, input, delta, maxMode = false) {
+  const powerMultiplier = maxMode ? 1.5 : 1
   if (input.forward) {
-    truck.speed += ACCELERATION * delta
+    truck.speed += ACCELERATION * powerMultiplier * delta
   } else if (input.backward) {
     truck.speed -= ACCELERATION * delta
   } else {
@@ -258,7 +285,7 @@ export function updateTruck(truck, input, delta) {
   if (isOnBump && input.forward && truck.speed > 0) {
     truck.speed += BUMP_ACCELERATION * delta
   }
-  const currentMaxSpeed = MAX_SPEED + (isOnBump ? BUMP_SPEED_BONUS : 0)
+  const currentMaxSpeed = (MAX_SPEED + (isOnBump ? BUMP_SPEED_BONUS : 0)) * powerMultiplier
   truck.speed = THREE.MathUtils.clamp(truck.speed, -MAX_SPEED / 2, currentMaxSpeed)
 
   const turnDirection = (input.left ? 1 : 0) - (input.right ? 1 : 0)
@@ -283,8 +310,11 @@ export function updateTruck(truck, input, delta) {
 
   const { x: halfX, z: halfZ } = getWorldHalfExtents(truck)
 
-  truck.mesh.position.x = THREE.MathUtils.clamp(nextX, -ROOM_BOUND + halfX, ROOM_BOUND - halfX)
-  truck.mesh.position.z = THREE.MathUtils.clamp(nextZ, -ROOM_BOUND + halfZ, ROOM_BOUND - halfZ)
+  const clampedX = THREE.MathUtils.clamp(nextX, -ROOM_BOUND + halfX, ROOM_BOUND - halfX)
+  const clampedZ = THREE.MathUtils.clamp(nextZ, -ROOM_BOUND + halfZ, ROOM_BOUND - halfZ)
+  const hitBoundary = clampedX !== nextX || clampedZ !== nextZ
+  truck.mesh.position.x = clampedX
+  truck.mesh.position.z = clampedZ
 
   const groundHeight = getFarmBumpHeight(truck.mesh.position.x, truck.mesh.position.z)
   truck.verticalVelocity += (
@@ -303,6 +333,7 @@ export function updateTruck(truck, input, delta) {
     }
     wheel.wheelMesh.rotation.x -= (truck.speed * delta) / (WHEEL_RADIUS * MODEL_SCALE)
   }
+  return hitBoundary
 }
 
 export function applyTruckImpact(truck, direction, force) {

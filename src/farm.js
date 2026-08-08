@@ -27,7 +27,7 @@ export function createFarmObjects(scene) {
 
       placed.push({ x, z, footprint: type.footprint })
       scene.add(animal)
-      animals.push(createDestructible(animal, type.pointValue))
+      animals.push(createDestructible(animal, type.pointValue, { recoverable: true }))
     }
   }
 
@@ -60,7 +60,7 @@ export function respawnFarmAnimal(scene, animals, destroyedAnimal) {
   animal.rotation.y = Math.random() * Math.PI * 2
   animal.userData.animalType = type.name
   scene.add(animal)
-  animals.push(createDestructible(animal, type.pointValue))
+  animals.push(createDestructible(animal, type.pointValue, { recoverable: true }))
 }
 
 function createCow() {

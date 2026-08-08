@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { destroy } from './destructible.js'
+import { ROOM_SIZE, WALL_THICKNESS } from './scene.js'
 
 const KNOCKBACK_SPEED = 9
 const KNOCKBACK_UP_SPEED = 6
@@ -7,6 +8,7 @@ const GRAVITY = 18
 const SPIN_SPEED = 6
 const MAX_LIFETIME = 2.5
 const FLOOR_REMOVE_Y = -5
+const RECOVERY_BOUND = ROOM_SIZE / 2 - WALL_THICKNESS - 4
 
 const truckBox = new THREE.Box3()
 const objectBox = new THREE.Box3()
@@ -71,7 +73,16 @@ export function createCollisionSystem(scene) {
 
       if (mesh.position.y < FLOOR_REMOVE_Y || flying.elapsed > MAX_LIFETIME) {
         flyingSet.delete(flying.destructible)
-        destroy(flying.destructible, scene)
+        if (flying.destructible.recoverable) {
+          mesh.position.set(
+            THREE.MathUtils.randFloatSpread(RECOVERY_BOUND * 2),
+            0,
+            THREE.MathUtils.randFloatSpread(RECOVERY_BOUND * 2),
+          )
+          mesh.rotation.set(0, Math.random() * Math.PI * 2, 0)
+        } else {
+          destroy(flying.destructible, scene)
+        }
         flyingObjects.splice(i, 1)
       }
     }

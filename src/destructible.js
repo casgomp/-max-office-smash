@@ -1,8 +1,9 @@
-export function createDestructible(mesh, pointValue) {
+export function createDestructible(mesh, pointValue, options = {}) {
   return {
     mesh,
     pointValue,
     destroyed: false,
+    recoverable: options.recoverable ?? false,
   }
 }
 

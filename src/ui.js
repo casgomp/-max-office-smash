@@ -7,6 +7,7 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
     <div id="timer">Time: 20</div>
     <div id="health">Health: 100</div>
     <div id="destroyed-trucks">Trucks destroyed: 0</div>
+    <div id="max-meter"><span>MAX</span><div class="max-track"><i></i></div></div>
   `
 
   const start = document.createElement('div')
@@ -60,6 +61,8 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
   const timerEl = hud.querySelector('#timer')
   const healthEl = hud.querySelector('#health')
   const destroyedTrucksEl = hud.querySelector('#destroyed-trucks')
+  const maxMeterEl = hud.querySelector('#max-meter')
+  const maxFillEl = maxMeterEl.querySelector('i')
   const nameInput = start.querySelector('#player-name')
   const startButton = start.querySelector('#start-button')
   const finalScoreEl = gameOver.querySelector('#final-score')
@@ -78,6 +81,7 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
 
   return {
     showStart() {
+      document.body.classList.remove('max-mode')
       start.classList.remove('hidden')
       hud.classList.add('hidden')
       minimap.classList.add('hidden')
@@ -88,14 +92,21 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       hud.classList.remove('hidden')
       minimap.classList.remove('hidden')
     },
-    updateHUD(score, timeRemaining, health, destroyedTrucks) {
+    updateHUD(score, timeRemaining, health, destroyedTrucks, maxCharge, maxModeRemaining) {
       scoreEl.textContent = `Score: ${score}`
       timerEl.textContent = `Time: ${Math.ceil(timeRemaining)}`
       healthEl.textContent = `Health: ${health}`
       healthEl.classList.toggle('danger', health <= 30)
       destroyedTrucksEl.textContent = `Trucks destroyed: ${destroyedTrucks}`
+      maxFillEl.style.width = `${maxModeRemaining > 0 ? 100 : maxCharge}%`
+      maxMeterEl.classList.toggle('active', maxModeRemaining > 0)
+      maxMeterEl.querySelector('span').textContent = maxModeRemaining > 0
+        ? `MAX ${maxModeRemaining.toFixed(1)}s`
+        : 'MAX'
+      document.body.classList.toggle('max-mode', maxModeRemaining > 0)
     },
     showGameOver(finalScore, rank, total, leaderboard, currentRun, endReason, destroyedTrucks) {
+      document.body.classList.remove('max-mode')
       minimap.classList.add('hidden')
       gameOver.querySelector('h1').textContent = endReason === 'destroyed' ? 'Truck Destroyed!' : "Time's Up!"
       finalScoreEl.textContent = `Final Score: ${finalScore}`
@@ -126,6 +137,18 @@ export function createUI({ onStart, onPlayAgain, farmSize }) {
       pickupMessage.classList.remove('hidden')
       clearTimeout(pickupTimeout)
       pickupTimeout = setTimeout(() => pickupMessage.classList.add('hidden'), 1300)
+    },
+    showMaxMode() {
+      pickupMessage.textContent = 'MAX MODE!'
+      pickupMessage.classList.remove('hidden')
+      clearTimeout(pickupTimeout)
+      pickupTimeout = setTimeout(() => pickupMessage.classList.add('hidden'), 1600)
+    },
+    showEnemyMaxMode() {
+      pickupMessage.textContent = 'ENEMY MAX MODE — 3 SECONDS!'
+      pickupMessage.classList.remove('hidden')
+      clearTimeout(pickupTimeout)
+      pickupTimeout = setTimeout(() => pickupMessage.classList.add('hidden'), 1800)
     },
     showDamage(amount) {
       damageEffect.querySelector('span').textContent = `-${amount}`
