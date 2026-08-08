@@ -137,6 +137,7 @@ let playerName = 'Player'
 let selectedTruckColor = 'red'
 let difficultyMultiplier = 1
 let selectedEnemyCount = 5
+let currentMultiplayerRun = null
 
 const ui = createUI({
   onStart: startGame,
@@ -150,6 +151,12 @@ const ui = createUI({
   onDifficultyChange: setDifficulty,
   onEnemyCountChange: (count) => { selectedEnemyCount = count },
   farmSize: ROOM_SIZE,
+})
+
+socket.on('leaderboardUpdated', ({ leaderboard, total }) => {
+  if (!gameOverShown || !currentMultiplayerRun) return
+  const rank = leaderboard.findIndex((run) => run.id === currentMultiplayerRun.id) + 1
+  ui.updateLeaderboard(rank || total, total, leaderboard, currentMultiplayerRun)
 })
 
 const CAMERA_OFFSET = new THREE.Vector3(0, 27, -18)
@@ -285,17 +292,8 @@ function animate() {
   if (started && gameState.isOver && !gameOverShown) {
     gameOverShown = true
     playGameEndSound(gameState.endReason)
-    const { rank, total, leaderboard, run } = recordRun(playerName, gameState.score)
     enemySystem.clearProjectiles()
-    ui.showGameOver(
-      gameState.score,
-      rank,
-      total,
-      leaderboard,
-      run,
-      gameState.endReason,
-      gameState.destroyedTrucks,
-    )
+    showSharedResults()
   }
 
   renderer.render(scene, camera)
@@ -306,6 +304,7 @@ function startGame(name) {
   enableImpactSounds()
   enableGameEndSound()
   playerName = name
+  currentMultiplayerRun = null
   resetGameState(gameState)
   resetTruck(truck)
   clearFarmObjects(scene, farmObjects)
@@ -330,6 +329,42 @@ function startGame(name) {
   )
   updateTruckHealth(truck, gameState.health)
   snapCamera()
+}
+
+function showSharedResults() {
+  const runId = `${socket.id || 'offline'}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+  const result = {
+    runId,
+    name: playerName,
+    score: gameState.score,
+    destroyedTrucks: gameState.destroyedTrucks,
+  }
+
+  const showResults = ({ rank, total, leaderboard, run }) => {
+    currentMultiplayerRun = run || leaderboard.find((entry) => entry.id === runId) || { id: runId, ...result }
+    ui.showGameOver(
+      gameState.score,
+      rank,
+      total,
+      leaderboard,
+      currentMultiplayerRun,
+      gameState.endReason,
+      gameState.destroyedTrucks,
+    )
+  }
+
+  if (!socket.connected) {
+    showResults(recordRun(playerName, gameState.score))
+    return
+  }
+
+  socket.timeout(2500).emit('submitScore', result, (error, response) => {
+    if (error || !response?.leaderboard) {
+      showResults(recordRun(playerName, gameState.score))
+      return
+    }
+    showResults(response)
+  })
 }
 
 function returnToStart() {

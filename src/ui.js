@@ -179,14 +179,13 @@ export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChan
       finalRankEl.textContent = `Rank: ${rank} of ${total} this session`
       finalDestroyedEl.textContent = `Trucks Destroyed: ${destroyedTrucks}`
 
-      leaderboardListEl.innerHTML = leaderboard
-        .map((run) => {
-          const current = run === currentRun ? ' class="current"' : ''
-          return `<li${current}><span>${escapeHtml(run.name)}</span><span>${run.score}</span></li>`
-        })
-        .join('')
+      renderLeaderboard(leaderboardListEl, leaderboard, currentRun)
 
       gameOver.classList.remove('hidden')
+    },
+    updateLeaderboard(rank, total, leaderboard, currentRun) {
+      finalRankEl.textContent = `Rank: ${rank} of ${total}`
+      renderLeaderboard(leaderboardListEl, leaderboard, currentRun)
     },
     hideGameOver() {
       gameOver.classList.add('hidden')
@@ -272,6 +271,16 @@ function drawMapDots(context, positions, mapX, mapY, color, radius) {
     context.arc(mapX(position.x), mapY(position.z), radius, 0, Math.PI * 2)
     context.fill()
   }
+}
+
+function renderLeaderboard(element, leaderboard, currentRun) {
+  element.innerHTML = leaderboard
+    .map((run) => {
+      const isCurrent = run === currentRun || (run.id && run.id === currentRun?.id)
+      const current = isCurrent ? ' class="current"' : ''
+      return `<li${current}><span>${escapeHtml(run.name)}</span><span>${run.score}</span></li>`
+    })
+    .join('')
 }
 
 function escapeHtml(text) {

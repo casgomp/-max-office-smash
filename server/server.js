@@ -13,6 +13,15 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 const players = {}; // keeps track of every connected player's data
+const leaderboard = [];
+const submittedRunIds = new Set();
+
+function getLeaderboardPayload() {
+  const runs = [...leaderboard]
+    .sort((a, b) => b.score - a.score || a.finishedAt - b.finishedAt)
+    .slice(0, 50);
+  return { leaderboard: runs, total: leaderboard.length };
+}
 
 io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
@@ -41,6 +50,27 @@ io.on('connection', (socket) => {
       type: data.type,
       force: data.force,
     });
+  });
+
+  socket.on('submitScore', (data, reply) => {
+    const runId = String(data?.runId || `${socket.id}:${Date.now()}`);
+    if (!submittedRunIds.has(runId)) {
+      submittedRunIds.add(runId);
+      leaderboard.push({
+        id: runId,
+        name: String(data?.name || 'Player').trim().slice(0, 16) || 'Player',
+        score: Math.max(0, Math.floor(Number(data?.score) || 0)),
+        destroyedTrucks: Math.max(0, Math.floor(Number(data?.destroyedTrucks) || 0)),
+        finishedAt: Date.now(),
+      });
+    }
+
+    const payload = getLeaderboardPayload();
+    const rank = [...leaderboard]
+      .sort((a, b) => b.score - a.score || a.finishedAt - b.finishedAt)
+      .findIndex((run) => run.id === runId) + 1;
+    if (typeof reply === 'function') reply({ ...payload, rank, runId });
+    io.emit('leaderboardUpdated', payload);
   });
 
   socket.on('disconnect', () => {
