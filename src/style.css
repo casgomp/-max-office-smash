@@ -213,6 +213,37 @@ body.max-mode #app canvas {
 
 #start-screen .menu-view.hidden { display: none; }
 
+#start-screen .instructions-view {
+  max-height: min(62vh, 560px);
+  padding-right: 6px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+#start-screen .instructions-view h2 {
+  margin: 0;
+  text-align: center;
+}
+
+#start-screen .instruction-section {
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: #f1f3ed;
+}
+
+#start-screen .instruction-section h3 {
+  margin: 0 0 6px;
+  color: #7d2d21;
+  font-size: 16px;
+}
+
+#start-screen .instruction-section p {
+  margin: 4px 0;
+  color: #41483f;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
 #start-screen .menu-view label {
   display: flex;
   align-items: center;

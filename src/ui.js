@@ -17,8 +17,36 @@ export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChan
       <h1>Max Farm Smash</h1>
       <div id="main-menu" class="menu-view">
         <button id="play-button" type="button">Play Game</button>
+        <button id="instructions-button" type="button">How to Play</button>
         <button id="options-button" type="button">Options</button>
         <button id="quit-button" type="button">Quit</button>
+      </div>
+      <div id="instructions-menu" class="menu-view instructions-view hidden">
+        <h2>How to Play</h2>
+        <div class="instruction-section">
+          <h3>Controls</h3>
+          <p><strong>WASD / Arrow keys</strong> — Drive</p>
+          <p><strong>Space bar</strong> — Shoot</p>
+        </div>
+        <div class="instruction-section">
+          <h3>Goal and points</h3>
+          <p>Survive until the timer ends and finish with the highest score.</p>
+          <p>Destroy an NPC enemy truck: <strong>+200 points and +3 seconds</strong>.</p>
+          <p>Crashing into animals gives <strong>no points</strong> and costs 10 health.</p>
+        </div>
+        <div class="instruction-section">
+          <h3>Health and combat</h3>
+          <p>Vegetables restore <strong>25 health</strong>. Your maximum health is 100.</p>
+          <p>Player bullets deal 15 damage and player crashes deal 12 damage.</p>
+          <p>Your truck disappears when destroyed. Start another round to respawn.</p>
+        </div>
+        <div class="instruction-section">
+          <h3>MAX mode</h3>
+          <p>Fill the MAX meter by fighting, collecting vegetables, and smashing obstacles.</p>
+          <p>MAX mode lasts 7 seconds, doubles points, strengthens shots, and reduces damage.</p>
+          <p>Crash into 3 animals and NPC enemies enter MAX mode for 3 seconds.</p>
+        </div>
+        <button class="back-button secondary" type="button">Back</button>
       </div>
       <div id="player-setup" class="menu-view hidden">
         <p class="controls">Drive: WASD or arrow keys<br />Shoot: Space bar</p>
@@ -111,6 +139,7 @@ export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChan
   const nameInput = start.querySelector('#player-name')
   const mainMenu = start.querySelector('#main-menu')
   const playerSetup = start.querySelector('#player-setup')
+  const instructionsMenu = start.querySelector('#instructions-menu')
   const optionsMenu = start.querySelector('#options-menu')
   const quitMenu = start.querySelector('#quit-menu')
   const startButton = start.querySelector('#start-button')
@@ -128,6 +157,7 @@ export function createUI({ onStart, onPlayAgain, onSoundChange, onTruckColorChan
     showMenuView(playerSetup)
     nameInput.focus()
   })
+  start.querySelector('#instructions-button').addEventListener('click', () => showMenuView(instructionsMenu))
   start.querySelector('#options-button').addEventListener('click', () => showMenuView(optionsMenu))
   start.querySelector('#quit-button').addEventListener('click', () => showMenuView(quitMenu))
   for (const button of start.querySelectorAll('.back-button')) {
