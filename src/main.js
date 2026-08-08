@@ -17,7 +17,7 @@ import { enableImpactSounds, playImpactSound } from './impactSounds.js'
 
 window.addEventListener('beforeunload', clearRuns)
 
-const socket = io('http://localhost:3000')
+const socket = io('https://max-farm-smash.onrender.com');
 
 socket.on('connect', () => {
   console.log('Connected to server! My id is:', socket.id)
