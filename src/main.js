@@ -104,6 +104,7 @@ socket.on('otherPlayerShoot', (data) => {
 
 // when the server tells you that YOU got hit
 socket.on('youWereHit', (data) => {
+  console.log('[pvp] youWereHit received:', data)
   takeDamage(data.damage)
   const shooter = otherPlayers[data.fromId]
   const recoil = shooter
@@ -215,6 +216,7 @@ function animate() {
       },
       otherPlayers,
       (targetId) => {
+        console.log('[pvp] local hit detected on', targetId, '- emitting hitPlayer')
         socket.emit('hitPlayer', { targetId, damage: 15 })
       },
     )
