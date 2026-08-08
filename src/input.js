@@ -7,6 +7,7 @@ const KEY_MAP = {
   ArrowLeft: 'left',
   KeyD: 'right',
   ArrowRight: 'right',
+  Space: 'shoot',
 }
 
 export function createInput() {
@@ -15,6 +16,7 @@ export function createInput() {
     backward: false,
     left: false,
     right: false,
+    shoot: false,
   }
 
   const handleKey = (event, isDown) => {

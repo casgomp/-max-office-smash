@@ -1,11 +1,18 @@
 import * as THREE from 'three'
-import { ROOM_SIZE, WALL_THICKNESS } from './scene.js'
+import { ROOM_SIZE, WALL_THICKNESS, getFarmBumpHeight } from './scene.js'
+import { createHealthBar, updateHealthBar } from './healthBar.js'
 
 const ACCELERATION = 12
 const MAX_SPEED = 14
 const TURN_SPEED = 2.2
 const FRICTION = 4
 const STEER_ANGLE_MAX = 0.5
+const SUSPENSION_STRENGTH = 38
+const SUSPENSION_DAMPING = 7
+const IMPACT_DRAG = 5
+const IMPACT_SPIN_DRAG = 6
+const BUMP_SPEED_BONUS = 6
+const BUMP_ACCELERATION = 14
 
 const ROOM_BOUND = ROOM_SIZE / 2 - WALL_THICKNESS / 2
 
@@ -191,6 +198,7 @@ export function createTruck(scene) {
 
   truckGroup.position.set(0, 0, 0)
   truckGroup.scale.setScalar(MODEL_SCALE)
+  const healthBar = createHealthBar(truckGroup, 7.2, 4.5)
   scene.add(truckGroup)
 
   const boundingBox = new THREE.Box3().setFromObject(truckGroup)
@@ -204,12 +212,25 @@ export function createTruck(scene) {
     halfLength,
     speed: 0,
     heading: 0,
+    verticalVelocity: 0,
+    impactVelocity: new THREE.Vector3(),
+    impactSpin: 0,
+    shotRecoil: 0,
+    healthBar,
   }
+}
+
+export function updateTruckHealth(truck, health) {
+  updateHealthBar(truck.healthBar, health)
 }
 
 export function resetTruck(truck) {
   truck.speed = 0
   truck.heading = 0
+  truck.verticalVelocity = 0
+  truck.impactVelocity.set(0, 0, 0)
+  truck.impactSpin = 0
+  truck.shotRecoil = 0
   truck.mesh.position.set(0, 0, 0)
   truck.mesh.rotation.set(0, 0, 0)
   for (const wheel of truck.wheels) {
@@ -232,7 +253,13 @@ export function updateTruck(truck, input, delta) {
     }
   }
 
-  truck.speed = THREE.MathUtils.clamp(truck.speed, -MAX_SPEED / 2, MAX_SPEED)
+  const currentBumpHeight = getFarmBumpHeight(truck.mesh.position.x, truck.mesh.position.z)
+  const isOnBump = currentBumpHeight > 0.08
+  if (isOnBump && input.forward && truck.speed > 0) {
+    truck.speed += BUMP_ACCELERATION * delta
+  }
+  const currentMaxSpeed = MAX_SPEED + (isOnBump ? BUMP_SPEED_BONUS : 0)
+  truck.speed = THREE.MathUtils.clamp(truck.speed, -MAX_SPEED / 2, currentMaxSpeed)
 
   const turnDirection = (input.left ? 1 : 0) - (input.right ? 1 : 0)
   if (turnDirection !== 0 && truck.speed !== 0) {
@@ -240,15 +267,35 @@ export function updateTruck(truck, input, delta) {
     truck.heading += turnDirection * TURN_SPEED * turnScale * delta
   }
 
+  truck.heading += truck.impactSpin * delta
+  truck.impactSpin *= Math.exp(-IMPACT_SPIN_DRAG * delta)
   truck.mesh.rotation.y = truck.heading
+  truck.shotRecoil *= Math.exp(-14 * delta)
+  truck.mesh.rotation.x = -truck.shotRecoil
 
-  const nextX = truck.mesh.position.x + Math.sin(truck.heading) * truck.speed * delta
-  const nextZ = truck.mesh.position.z + Math.cos(truck.heading) * truck.speed * delta
+  const nextX = truck.mesh.position.x
+    + Math.sin(truck.heading) * truck.speed * delta
+    + truck.impactVelocity.x * delta
+  const nextZ = truck.mesh.position.z
+    + Math.cos(truck.heading) * truck.speed * delta
+    + truck.impactVelocity.z * delta
+  truck.impactVelocity.multiplyScalar(Math.exp(-IMPACT_DRAG * delta))
 
   const { x: halfX, z: halfZ } = getWorldHalfExtents(truck)
 
   truck.mesh.position.x = THREE.MathUtils.clamp(nextX, -ROOM_BOUND + halfX, ROOM_BOUND - halfX)
   truck.mesh.position.z = THREE.MathUtils.clamp(nextZ, -ROOM_BOUND + halfZ, ROOM_BOUND - halfZ)
+
+  const groundHeight = getFarmBumpHeight(truck.mesh.position.x, truck.mesh.position.z)
+  truck.verticalVelocity += (
+    (groundHeight - truck.mesh.position.y) * SUSPENSION_STRENGTH
+    - truck.verticalVelocity * SUSPENSION_DAMPING
+  ) * delta
+  truck.mesh.position.y += truck.verticalVelocity * delta
+  if (truck.mesh.position.y < 0) {
+    truck.mesh.position.y = 0
+    truck.verticalVelocity = Math.max(0, truck.verticalVelocity)
+  }
 
   for (const wheel of truck.wheels) {
     if (wheel.steer) {
@@ -256,6 +303,12 @@ export function updateTruck(truck, input, delta) {
     }
     wheel.wheelMesh.rotation.x -= (truck.speed * delta) / (WHEEL_RADIUS * MODEL_SCALE)
   }
+}
+
+export function applyTruckImpact(truck, direction, force) {
+  truck.impactVelocity.addScaledVector(direction, force)
+  truck.impactSpin += (Math.random() < 0.5 ? -1 : 1) * force * 0.09
+  truck.verticalVelocity = Math.max(truck.verticalVelocity, force * 0.24)
 }
 
 function getWorldHalfExtents(truck) {

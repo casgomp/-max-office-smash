@@ -27,7 +27,7 @@ export function createCollisionSystem(scene) {
 
       flyingSet.add(destructible)
       launchObject(destructible, truck)
-      onScore(destructible.pointValue)
+      onScore(destructible.pointValue, destructible)
     }
   }
 
