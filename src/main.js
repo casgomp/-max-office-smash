@@ -41,6 +41,7 @@ setInterval(() => {
       rotation: truck.mesh.rotation.y,
       name: playerName,
       color: selectedTruckColor,
+      health: gameState.health,
     })
   }
 }, 100) // every 100ms = 10 times per second
@@ -69,6 +70,7 @@ socket.on('playerMoved', (data) => {
       other.color = data.color
     }
     other.playerName = data.name || other.playerName || 'Player'
+    if (Number.isFinite(data.health)) updateTruckHealth(other, data.health)
   }
 })
 
@@ -87,6 +89,8 @@ function spawnOtherPlayer(id, data) {
   setTruckColor(otherTruck, data.color || 'blue')
   otherTruck.color = data.color || 'blue'
   otherTruck.playerName = data.name || 'Player'
+  otherTruck.pvpCrashCooldown = 0
+  if (Number.isFinite(data.health)) updateTruckHealth(otherTruck, data.health)
   otherPlayers[id] = otherTruck
 }
 
@@ -116,7 +120,7 @@ socket.on('youWereHit', (data) => {
     : new THREE.Vector3(0, 0, 1)
   if (recoil.lengthSq() < 0.001) recoil.set(0, 0, 1)
   else recoil.normalize()
-  applyTruckImpact(truck, recoil, 4)
+  applyTruckImpact(truck, recoil, data.force || 4)
   playImpactSound('truck')
 })
 const input = createInput()
@@ -174,6 +178,7 @@ function animate() {
     const hitFence = updateTruck(truck, input, delta, isMaxMode(gameState))
     if (hitFence && Math.abs(truck.speed) > 1) playImpactSound('fence')
     checkSolidSceneryCollision()
+    checkMultiplayerTruckCollisions(delta)
     collisionSystem.checkCollisions(truck, farmObjects, (points, animal) => {
       addScore(gameState, points)
       chargeMax(8)
@@ -236,7 +241,7 @@ function animate() {
       otherPlayers,
       (targetId) => {
         console.log('[pvp] local hit detected on', targetId, '- emitting hitPlayer')
-        socket.emit('hitPlayer', { targetId, damage: 15 })
+        socket.emit('hitPlayer', { targetId, damage: 15, type: 'bullet', force: 4 })
       },
       difficultyMultiplier * (1 + Math.min(gameState.elapsedTime / 90, 0.55)),
     )
@@ -342,6 +347,37 @@ function takeDamage(amount) {
   if (damageTaken <= 0) return
   cameraShake = Math.max(cameraShake, Math.min(1.2, damageTaken / 25))
   ui.showDamage(damageTaken)
+}
+
+function checkMultiplayerTruckCollisions(delta) {
+  for (const [id, other] of Object.entries(otherPlayers)) {
+    other.pvpCrashCooldown = Math.max(0, (other.pvpCrashCooldown || 0) - delta)
+
+    const separation = new THREE.Vector3().subVectors(truck.mesh.position, other.mesh.position).setY(0)
+    const collisionDistance = truck.halfLength + other.halfLength
+    if (separation.lengthSq() >= collisionDistance * collisionDistance || other.pvpCrashCooldown > 0) continue
+
+    // Only one of the two clients resolves the shared collision, preventing double damage.
+    if (!socket.id || socket.id.localeCompare(id) > 0) continue
+
+    if (separation.lengthSq() < 0.001) separation.set(1, 0, 0)
+    else separation.normalize()
+
+    const crashDamage = 12
+    const impactForce = Math.max(9, Math.abs(truck.speed) * 0.8)
+    other.pvpCrashCooldown = 1
+    truck.mesh.position.addScaledVector(separation, 0.8)
+    truck.speed *= -0.55
+    takeDamage(crashDamage)
+    applyTruckImpact(truck, separation, impactForce)
+    playImpactSound('truck')
+    socket.emit('hitPlayer', {
+      targetId: id,
+      damage: crashDamage,
+      type: 'crash',
+      force: impactForce,
+    })
+  }
 }
 
 function setSoundEnabled(enabled) {

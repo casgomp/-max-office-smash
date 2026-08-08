@@ -33,9 +33,14 @@ io.on('connection', (socket) => {
 
   // relay a hit to the specific player who got hit
   socket.on('hitPlayer', (data) => {
-    // data = { targetId, damage }
+    // data = { targetId, damage, type, force }
     console.log('hitPlayer from', socket.id, '-> target', data.targetId, 'damage', data.damage);
-    io.to(data.targetId).emit('youWereHit', { damage: data.damage, fromId: socket.id });
+    io.to(data.targetId).emit('youWereHit', {
+      damage: data.damage,
+      fromId: socket.id,
+      type: data.type,
+      force: data.force,
+    });
   });
 
   socket.on('disconnect', () => {
