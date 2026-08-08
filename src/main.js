@@ -1,11 +1,11 @@
 import * as THREE from 'three'
 import './style.css'
-import { createScene } from './scene.js'
+import { createScene, ROOM_SIZE } from './scene.js'
 import { createTruck, updateTruck, resetTruck, updateTruckHealth, applyTruckImpact } from './truck.js'
 import { createInput } from './input.js'
 import { createFarmObjects, clearFarmObjects, respawnFarmAnimal } from './farm.js'
 import { createCollisionSystem } from './collision.js'
-import { createGameState, updateGameState, addScore, damagePlayer, healPlayer, resetGameState } from './gameState.js'
+import { createGameState, updateGameState, addScore, addTime, damagePlayer, healPlayer, recordDestroyedTruck, resetGameState } from './gameState.js'
 import { createUI } from './ui.js'
 import { recordRun, clearRuns } from './leaderboard.js'
 import { createEnemySystem } from './enemies.js'
@@ -26,7 +26,7 @@ let gameOverShown = false
 let started = false
 let playerName = 'Player'
 
-const ui = createUI({ onStart: startGame, onPlayAgain: returnToStart })
+const ui = createUI({ onStart: startGame, onPlayAgain: returnToStart, farmSize: ROOM_SIZE })
 
 const CAMERA_OFFSET = new THREE.Vector3(0, 27, -18)
 const CAMERA_LOOK_OFFSET = new THREE.Vector3(0, 1, 0)
@@ -68,10 +68,15 @@ function animate() {
         takeDamage(amount)
         applyTruckImpact(truck, direction, 10)
       },
-      (points) => addScore(gameState, points),
+      (points) => {
+        addScore(gameState, points)
+        recordDestroyedTruck(gameState)
+        const bonus = addTime(gameState, 3)
+        if (bonus > 0) ui.showTimeBonus(bonus)
+      },
       input.shoot,
     )
-    vegetableSystem.update(truck, (amount, type) => {
+    vegetableSystem.update(delta, truck, (amount, type) => {
       const healed = healPlayer(gameState, amount)
       ui.showPickup(type, healed)
       return healed > 0
@@ -80,14 +85,29 @@ function animate() {
   collisionSystem.updateFlyingObjects(delta)
   updateCamera(delta)
 
-  ui.updateHUD(gameState.score, gameState.timeRemaining, gameState.health)
+  ui.updateHUD(gameState.score, gameState.timeRemaining, gameState.health, gameState.destroyedTrucks)
   updateTruckHealth(truck, gameState.health)
+  ui.updateMinimap(
+    truck.mesh.position,
+    truck.heading,
+    enemySystem.getPositions(),
+    farmObjects.filter((animal) => !animal.destroyed).map((animal) => animal.mesh.position),
+    vegetableSystem.getPositions(),
+  )
 
   if (started && gameState.isOver && !gameOverShown) {
     gameOverShown = true
     const { rank, total, leaderboard, run } = recordRun(playerName, gameState.score)
     enemySystem.clearProjectiles()
-    ui.showGameOver(gameState.score, rank, total, leaderboard, run, gameState.endReason)
+    ui.showGameOver(
+      gameState.score,
+      rank,
+      total,
+      leaderboard,
+      run,
+      gameState.endReason,
+      gameState.destroyedTrucks,
+    )
   }
 
   renderer.render(scene, camera)
@@ -107,7 +127,7 @@ function startGame(name) {
   cameraShake = 0
   ui.hideStart()
   ui.hideGameOver()
-  ui.updateHUD(gameState.score, gameState.timeRemaining, gameState.health)
+  ui.updateHUD(gameState.score, gameState.timeRemaining, gameState.health, gameState.destroyedTrucks)
   updateTruckHealth(truck, gameState.health)
   snapCamera()
 }

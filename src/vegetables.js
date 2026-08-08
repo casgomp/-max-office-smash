@@ -2,32 +2,37 @@ import * as THREE from 'three'
 
 const PICKUP_RADIUS = 2
 const HEAL_AMOUNT = 25
-const PATCH_POSITIONS = [
-  [-12, -20, 'carrot'],
-  [22, 8, 'cabbage'],
-  [-35, 34, 'corn'],
-  [42, -28, 'carrot'],
-  [8, 55, 'cabbage'],
-  [-52, -8, 'corn'],
-  [52, 42, 'carrot'],
-  [-18, 48, 'cabbage'],
+const VEGETABLE_TYPES = ['carrot', 'cabbage', 'corn']
+const FIELD_DEFINITIONS = [
+  { x: -28, z: 18, width: 18, length: 13 },
+  { x: 29, z: 27, width: 18, length: 13 },
 ]
+const VEGETABLES_PER_FIELD = 6
 
 export function createVegetableSystem(scene) {
   const vegetables = []
+  const fields = []
+  const regrowthQueue = []
 
   function spawn() {
     clear()
-    for (const [x, z, type] of PATCH_POSITIONS) {
-      const mesh = createVegetable(type)
-      mesh.position.set(x, 0, z)
-      mesh.rotation.y = Math.random() * Math.PI * 2
-      scene.add(mesh)
-      vegetables.push({ mesh, type })
+    for (const field of FIELD_DEFINITIONS) {
+      createWorkedField(field)
+      for (let i = 0; i < VEGETABLES_PER_FIELD; i++) {
+        growVegetable(field, VEGETABLE_TYPES[(i + fields.length) % VEGETABLE_TYPES.length])
+      }
     }
   }
 
-  function update(playerTruck, onCollect) {
+  function update(delta, playerTruck, onCollect) {
+    for (let i = regrowthQueue.length - 1; i >= 0; i--) {
+      const regrowth = regrowthQueue[i]
+      regrowth.time -= delta
+      if (regrowth.time > 0) continue
+      growVegetable(regrowth.field, regrowth.type)
+      regrowthQueue.splice(i, 1)
+    }
+
     const player = playerTruck.mesh.position
     for (let i = vegetables.length - 1; i >= 0; i--) {
       const vegetable = vegetables[i]
@@ -37,15 +42,60 @@ export function createVegetableSystem(scene) {
       if (!onCollect(HEAL_AMOUNT, vegetable.type)) continue
       scene.remove(vegetable.mesh)
       vegetables.splice(i, 1)
+      regrowthQueue.push({
+        field: vegetable.field,
+        type: VEGETABLE_TYPES[Math.floor(Math.random() * VEGETABLE_TYPES.length)],
+        time: THREE.MathUtils.randFloat(4, 7),
+      })
     }
+  }
+
+  function growVegetable(field, type) {
+    const mesh = createVegetable(type)
+    const margin = 1.5
+    mesh.position.set(
+      field.x + THREE.MathUtils.randFloatSpread(field.width - margin * 2),
+      0,
+      field.z + THREE.MathUtils.randFloatSpread(field.length - margin * 2),
+    )
+    mesh.rotation.y = Math.random() * Math.PI * 2
+    scene.add(mesh)
+    vegetables.push({ mesh, type, field })
+  }
+
+  function createWorkedField(field) {
+    const group = new THREE.Group()
+    const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x5c3824, roughness: 1 })
+    const rowMaterial = new THREE.MeshStandardMaterial({ color: 0x7a4c2e, roughness: 1 })
+    const soil = new THREE.Mesh(new THREE.BoxGeometry(field.width, 0.16, field.length), soilMaterial)
+    soil.position.y = 0.04
+    soil.receiveShadow = true
+    group.add(soil)
+
+    for (let x = -field.width / 2 + 1.5; x < field.width / 2; x += 3) {
+      const row = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.24, field.length - 1), rowMaterial)
+      row.position.set(x, 0.17, 0)
+      row.receiveShadow = true
+      group.add(row)
+    }
+    group.position.set(field.x, 0, field.z)
+    scene.add(group)
+    fields.push(group)
   }
 
   function clear() {
     for (const vegetable of vegetables) scene.remove(vegetable.mesh)
     vegetables.length = 0
+    for (const field of fields) scene.remove(field)
+    fields.length = 0
+    regrowthQueue.length = 0
   }
 
-  return { spawn, update, clear }
+  function getPositions() {
+    return vegetables.map((vegetable) => vegetable.mesh.position)
+  }
+
+  return { spawn, update, clear, getPositions }
 }
 
 function createVegetable(type) {

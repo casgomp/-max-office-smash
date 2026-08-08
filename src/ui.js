@@ -1,4 +1,4 @@
-export function createUI({ onStart, onPlayAgain }) {
+export function createUI({ onStart, onPlayAgain, farmSize }) {
   const hud = document.createElement('div')
   hud.id = 'hud'
   hud.classList.add('hidden')
@@ -6,6 +6,7 @@ export function createUI({ onStart, onPlayAgain }) {
     <div id="score">Score: 0</div>
     <div id="timer">Time: 20</div>
     <div id="health">Health: 100</div>
+    <div id="destroyed-trucks">Trucks destroyed: 0</div>
   `
 
   const start = document.createElement('div')
@@ -27,12 +28,21 @@ export function createUI({ onStart, onPlayAgain }) {
       <h1>Time's Up!</h1>
       <p id="final-score">Final Score: 0</p>
       <p id="final-rank">Rank: -</p>
+      <p id="final-destroyed">Trucks Destroyed: 0</p>
       <ol id="leaderboard-list"></ol>
       <button id="play-again-button" type="button">Play Again</button>
     </div>
   `
 
   document.querySelector('#app').append(hud, start, gameOver)
+
+  const minimap = document.createElement('canvas')
+  minimap.id = 'minimap'
+  minimap.classList.add('hidden')
+  minimap.width = 190
+  minimap.height = 190
+  document.querySelector('#app').append(minimap)
+  const minimapContext = minimap.getContext('2d')
 
   const pickupMessage = document.createElement('div')
   pickupMessage.id = 'pickup-message'
@@ -49,10 +59,12 @@ export function createUI({ onStart, onPlayAgain }) {
   const scoreEl = hud.querySelector('#score')
   const timerEl = hud.querySelector('#timer')
   const healthEl = hud.querySelector('#health')
+  const destroyedTrucksEl = hud.querySelector('#destroyed-trucks')
   const nameInput = start.querySelector('#player-name')
   const startButton = start.querySelector('#start-button')
   const finalScoreEl = gameOver.querySelector('#final-score')
   const finalRankEl = gameOver.querySelector('#final-rank')
+  const finalDestroyedEl = gameOver.querySelector('#final-destroyed')
   const leaderboardListEl = gameOver.querySelector('#leaderboard-list')
 
   startButton.addEventListener('click', () => {
@@ -68,22 +80,27 @@ export function createUI({ onStart, onPlayAgain }) {
     showStart() {
       start.classList.remove('hidden')
       hud.classList.add('hidden')
+      minimap.classList.add('hidden')
       nameInput.focus()
     },
     hideStart() {
       start.classList.add('hidden')
       hud.classList.remove('hidden')
+      minimap.classList.remove('hidden')
     },
-    updateHUD(score, timeRemaining, health) {
+    updateHUD(score, timeRemaining, health, destroyedTrucks) {
       scoreEl.textContent = `Score: ${score}`
       timerEl.textContent = `Time: ${Math.ceil(timeRemaining)}`
       healthEl.textContent = `Health: ${health}`
       healthEl.classList.toggle('danger', health <= 30)
+      destroyedTrucksEl.textContent = `Trucks destroyed: ${destroyedTrucks}`
     },
-    showGameOver(finalScore, rank, total, leaderboard, currentRun, endReason) {
+    showGameOver(finalScore, rank, total, leaderboard, currentRun, endReason, destroyedTrucks) {
+      minimap.classList.add('hidden')
       gameOver.querySelector('h1').textContent = endReason === 'destroyed' ? 'Truck Destroyed!' : "Time's Up!"
       finalScoreEl.textContent = `Final Score: ${finalScore}`
       finalRankEl.textContent = `Rank: ${rank} of ${total} this session`
+      finalDestroyedEl.textContent = `Trucks Destroyed: ${destroyedTrucks}`
 
       leaderboardListEl.innerHTML = leaderboard
         .map((run) => {
@@ -104,12 +121,60 @@ export function createUI({ onStart, onPlayAgain }) {
       clearTimeout(pickupTimeout)
       pickupTimeout = setTimeout(() => pickupMessage.classList.add('hidden'), 1100)
     },
+    showTimeBonus(seconds) {
+      pickupMessage.textContent = `Enemy destroyed! +${seconds} seconds`
+      pickupMessage.classList.remove('hidden')
+      clearTimeout(pickupTimeout)
+      pickupTimeout = setTimeout(() => pickupMessage.classList.add('hidden'), 1300)
+    },
     showDamage(amount) {
       damageEffect.querySelector('span').textContent = `-${amount}`
       damageEffect.classList.remove('hidden', 'hit')
       void damageEffect.offsetWidth
       damageEffect.classList.add('hit')
     },
+    updateMinimap(player, heading, enemies, animals, vegetables) {
+      const size = minimap.width
+      const padding = 10
+      const mapSize = size - padding * 2
+      const scale = mapSize / farmSize
+      const mapX = (x) => size / 2 + x * scale
+      const mapY = (z) => size / 2 + z * scale
+
+      minimapContext.clearRect(0, 0, size, size)
+      minimapContext.fillStyle = 'rgba(20, 37, 25, 0.88)'
+      minimapContext.fillRect(0, 0, size, size)
+      minimapContext.fillStyle = '#609c49'
+      minimapContext.fillRect(padding, padding, mapSize, mapSize)
+      minimapContext.strokeStyle = '#d4a866'
+      minimapContext.lineWidth = 3
+      minimapContext.strokeRect(padding, padding, mapSize, mapSize)
+
+      drawMapDots(minimapContext, animals, mapX, mapY, '#f5efe2', 1.8)
+      drawMapDots(minimapContext, vegetables, mapX, mapY, '#72ff62', 2.4)
+      drawMapDots(minimapContext, enemies, mapX, mapY, '#ff4747', 3.2)
+
+      minimapContext.save()
+      minimapContext.translate(mapX(player.x), mapY(player.z))
+      minimapContext.rotate(heading)
+      minimapContext.fillStyle = '#53c7ff'
+      minimapContext.beginPath()
+      minimapContext.moveTo(0, 7)
+      minimapContext.lineTo(-5, -5)
+      minimapContext.lineTo(5, -5)
+      minimapContext.closePath()
+      minimapContext.fill()
+      minimapContext.restore()
+    },
+  }
+}
+
+function drawMapDots(context, positions, mapX, mapY, color, radius) {
+  context.fillStyle = color
+  for (const position of positions) {
+    context.beginPath()
+    context.arc(mapX(position.x), mapY(position.z), radius, 0, Math.PI * 2)
+    context.fill()
   }
 }
 

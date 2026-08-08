@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import { ROOM_SIZE, WALL_THICKNESS, getFarmBumpHeight } from './scene.js'
 import { createHealthBar, updateHealthBar } from './healthBar.js'
 
-const ACCELERATION = 12
-const MAX_SPEED = 14
+const ACCELERATION = 16
+const MAX_SPEED = 17
 const TURN_SPEED = 2.2
 const FRICTION = 4
 const STEER_ANGLE_MAX = 0.5

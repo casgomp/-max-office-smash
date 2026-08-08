@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { ROOM_SIZE, WALL_THICKNESS, getFarmBumpHeight } from './scene.js'
 import { createHealthBar, updateHealthBar } from './healthBar.js'
 
-const ENEMY_COUNT = 3
+const ENEMY_COUNT = 5
 const MOVE_SPEED = 7
 const TURN_SPEED = 2.8
 const ACCELERATION_RESPONSE = 3.5
@@ -28,6 +28,8 @@ const spawnPoints = [
   [-48, -42],
   [48, -42],
   [0, 52],
+  [-58, 30],
+  [58, 28],
 ]
 const ENEMY_COLORS = [
   { body: 0x2457c5, accent: 0x4f8cff },
@@ -43,7 +45,9 @@ export function createEnemySystem(scene, projectileBlockers = []) {
   const playerProjectiles = []
   const debrisPieces = []
   const muzzleFlashes = []
+  const graves = []
   let playerFireCooldown = 0
+  let nextEnemyIndex = ENEMY_COUNT
   const projectileGeometry = new THREE.SphereGeometry(0.2, 12, 8)
   const projectileMaterial = new THREE.MeshStandardMaterial({
     color: 0xff7b22,
@@ -140,6 +144,75 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     for (let i = 0; i < ENEMY_COUNT; i++) {
       createEnemy(...spawnPoints[i], i)
     }
+    nextEnemyIndex = ENEMY_COUNT
+  }
+
+  function createGrave(position) {
+    const grave = new THREE.Group()
+    const rust = new THREE.MeshStandardMaterial({ color: 0x6f3524, metalness: 0.35, roughness: 0.95 })
+    const burntMetal = new THREE.MeshStandardMaterial({ color: 0x25282a, metalness: 0.55, roughness: 0.85 })
+    const brokenGlass = new THREE.MeshStandardMaterial({ color: 0x17232b, roughness: 0.35 })
+
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.48, 3.3), rust)
+    chassis.position.y = 0.55
+    chassis.rotation.z = 0.1
+    chassis.castShadow = true
+    grave.add(chassis)
+
+    const crushedCab = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.7, 1.35), burntMetal)
+    crushedCab.position.set(0.18, 1.05, -0.3)
+    crushedCab.rotation.set(-0.12, 0.08, -0.16)
+    crushedCab.castShadow = true
+    grave.add(crushedCab)
+
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.38, 0.06), brokenGlass)
+    windshield.position.set(0.18, 1.12, 0.4)
+    windshield.rotation.z = -0.16
+    grave.add(windshield)
+
+    const wheelGeometry = new THREE.CylinderGeometry(0.48, 0.48, 0.35, 12)
+    for (const [x, z, tilt] of [[-1.15, 0.9, 0.2], [1.45, -0.85, 1.15], [-1.55, -1.35, 0.8]]) {
+      const wheel = new THREE.Mesh(wheelGeometry, burntMetal)
+      wheel.position.set(x, 0.35, z)
+      wheel.rotation.set(Math.PI / 2, tilt, Math.PI / 2)
+      wheel.castShadow = true
+      grave.add(wheel)
+    }
+
+    for (let i = 0; i < 4; i++) {
+      const scrap = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.08, 0.42), i % 2 ? rust : burntMetal)
+      scrap.position.set(THREE.MathUtils.randFloatSpread(4), 0.08, THREE.MathUtils.randFloatSpread(4))
+      scrap.rotation.set(Math.random(), Math.random() * Math.PI, Math.random())
+      grave.add(scrap)
+    }
+    grave.position.set(position.x, 0, position.z)
+    grave.rotation.y = Math.random() * Math.PI * 2
+    scene.add(grave)
+    graves.push(grave)
+  }
+
+  function respawnEnemy(playerPosition) {
+    let x = 0
+    let z = 0
+    for (let attempt = 0; attempt < 40; attempt++) {
+      x = THREE.MathUtils.randFloatSpread(ROOM_BOUND * 1.8)
+      z = THREE.MathUtils.randFloatSpread(ROOM_BOUND * 1.8)
+      const farFromPlayer = Math.hypot(x - playerPosition.x, z - playerPosition.z) > 28
+      const farFromEnemies = enemies.every(
+        (enemy) => Math.hypot(x - enemy.mesh.position.x, z - enemy.mesh.position.z) > 10,
+      )
+      if (farFromPlayer && farFromEnemies) break
+    }
+    createEnemy(x, z, nextEnemyIndex++)
+  }
+
+  function destroyEnemy(enemy, playerPosition, onEnemyDestroyed) {
+    createGrave(enemy.mesh.position)
+    scene.remove(enemy.mesh)
+    const index = enemies.indexOf(enemy)
+    if (index !== -1) enemies.splice(index, 1)
+    onEnemyDestroyed(200)
+    respawnEnemy(playerPosition)
   }
 
   function fire(enemy, direction) {
@@ -265,9 +338,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         createAccidentEffect(enemy.mesh.position, separation)
         onCrash(CRASH_DAMAGE, separation.clone().negate())
         if (enemy.health === 0) {
-          scene.remove(enemy.mesh)
-          enemies.splice(enemies.indexOf(enemy), 1)
-          onEnemyDestroyed(200)
+          destroyEnemy(enemy, target, onEnemyDestroyed)
         }
         continue
       }
@@ -344,9 +415,7 @@ export function createEnemySystem(scene, projectileBlockers = []) {
         hitEnemy.crashVelocity.copy(projectile.velocity).normalize().multiplyScalar(2.5)
         createAccidentEffect(projectile.mesh.position, projectile.velocity.clone().normalize())
         if (hitEnemy.health <= 0) {
-          scene.remove(hitEnemy.mesh)
-          enemies.splice(enemies.indexOf(hitEnemy), 1)
-          onEnemyDestroyed(200)
+          destroyEnemy(hitEnemy, target, onEnemyDestroyed)
         }
       }
 
@@ -448,7 +517,13 @@ export function createEnemySystem(scene, projectileBlockers = []) {
     for (const enemy of enemies) scene.remove(enemy.mesh)
     enemies.length = 0
     clearProjectiles()
+    for (const grave of graves) scene.remove(grave)
+    graves.length = 0
   }
 
-  return { spawn, update, clear, clearProjectiles }
+  function getPositions() {
+    return enemies.map((enemy) => enemy.mesh.position)
+  }
+
+  return { spawn, update, clear, clearProjectiles, getPositions }
 }

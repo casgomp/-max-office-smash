@@ -32,6 +32,23 @@ body {
   display: none;
 }
 
+#minimap {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 2;
+  width: 190px;
+  height: 190px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+#minimap.hidden {
+  display: none;
+}
+
 #hud > div {
   width: fit-content;
   padding: 8px 14px;

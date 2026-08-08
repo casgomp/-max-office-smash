@@ -6,6 +6,7 @@ export function createGameState() {
     duration: DURATION,
     timeRemaining: DURATION,
     score: 0,
+    destroyedTrucks: 0,
     health: MAX_HEALTH,
     isOver: false,
     endReason: null,
@@ -42,9 +43,21 @@ export function addScore(state, points) {
   state.score += points
 }
 
+export function recordDestroyedTruck(state) {
+  if (state.isOver) return
+  state.destroyedTrucks += 1
+}
+
+export function addTime(state, seconds) {
+  if (state.isOver) return 0
+  state.timeRemaining += seconds
+  return seconds
+}
+
 export function resetGameState(state) {
   state.timeRemaining = state.duration
   state.score = 0
+  state.destroyedTrucks = 0
   state.health = MAX_HEALTH
   state.isOver = false
   state.endReason = null
